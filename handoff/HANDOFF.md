@@ -59,8 +59,23 @@ Pada sesi ini, seluruh rangkaian **Wave 8 (Tiket 01 s/d Tiket 06)** telah berhas
 
 ---
 
-## 3. Ringkasan Berkas Kunci Proyek
+## 3. Perencanaan Wave 9: Apple Editorial UI, Komposisi Fibonacci & Integrasi Murni Beautiful UI (100% Light Mode)
 
+Sesuai arahan, spesifikasi Wave 9 telah disusun di [`.scratch/wave-9-apple-editorial-ui/spec.md`](file:///D:/PEREWANGAN%20369/Tani/.scratch/wave-9-apple-editorial-ui/spec.md) dan dipecah menjadi **6 tiket kerja terisolasi (*vertical slices*)** di [`.scratch/wave-9-apple-editorial-ui/issues/`](file:///D:/PEREWANGAN%20369/Tani/.scratch/wave-9-apple-editorial-ui/issues/):
+
+1. **Tiket 01:** Pure Light Theme Purge, Apple Editorial Typography & Fibonacci Golden Grid (`w-[377px]`/`w-[610px]`, `px-[21px] py-[34px]`).
+2. **Tiket 02:** Beautiful UI Segmented Pill Switcher & Mode Navigation (`bg-[#f4f4f5] rounded-full` with sliding white capsule).
+3. **Tiket 03:** Beautiful UI Clean Canvas Dropzone & Spatial File Uploader (fine dashed perimeter, sage pill avatar).
+4. **Tiket 04:** Beautiful UI Task Rows & Spatial Summary Metrics Cards (monospaced tabular figures, pill badges).
+5. **Tiket 05:** Beautiful UI Records Table & Inline Plot Controls (13px Fibonacci cell padding, hairline dividers, rounded checkboxes).
+6. **Tiket 06:** Apple-Style Glassmorphism Map Controls, Telemetry Success Modal & Full Verification (123 tests passing).
+
+---
+
+## 4. Ringkasan Berkas Kunci Proyek
+
+* **Spesifikasi Wave 9:** [`.scratch/wave-9-apple-editorial-ui/spec.md`](file:///D:/PEREWANGAN%20369/Tani/.scratch/wave-9-apple-editorial-ui/spec.md)
+* **Direktori Tiket Wave 9:** [`.scratch/wave-9-apple-editorial-ui/issues/`](file:///D:/PEREWANGAN%20369/Tani/.scratch/wave-9-apple-editorial-ui/issues/)
 * **Spesifikasi Wave 8:** [`.scratch/wave-8-sync-and-batch/spec.md`](file:///D:/PEREWANGAN%20369/Tani/.scratch/wave-8-sync-and-batch/spec.md)
 * **Direktori Tiket Wave 8:** [`.scratch/wave-8-sync-and-batch/issues/`](file:///D:/PEREWANGAN%20369/Tani/.scratch/wave-8-sync-and-batch/issues/)
 * **Parser Geospasial (Tunggal & Batch):** [`backend/app/utils/kml_parser.py`](file:///D:/PEREWANGAN%20369/Tani/backend/app/utils/kml_parser.py)
