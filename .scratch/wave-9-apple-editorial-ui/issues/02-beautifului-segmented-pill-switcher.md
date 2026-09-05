@@ -5,10 +5,10 @@ Extract and implement the mode switcher into an isolated, lightweight component 
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** closed
 
-- [ ] Create isolated component `frontend/src/components/plot/ModeSegmentedControl.tsx` with props `activeTab: 'single' | 'batch'` and `onChange: (tab: 'single' | 'batch') => void`.
-- [ ] Implement Beautiful UI pill container: `relative inline-grid grid-cols-2 p-[3px] bg-[#f4f4f5] rounded-full border border-black/[0.04] shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]`.
-- [ ] Implement active sliding white pill with soft elevation shadow and subtle text ink color transitions (`text-[13px] font-medium text-[#09090b]`).
-- [ ] Mount in `frontend/src/app/admin/petak-baru/page.tsx` replacing inline tabs.
-- [ ] Ensure full keyboard accessibility and touch responsiveness.
+- [x] Create isolated component `frontend/src/components/plot/ModeSegmentedControl.tsx` with props `activeTab: 'single' | 'batch'` and `onChange: (tab: 'single' | 'batch') => void`.
+- [x] Implement Beautiful UI pill container: `relative inline-grid grid-cols-2 p-[3px] bg-[#f4f4f5] rounded-full border border-black/[0.04] shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]`.
+- [x] Implement active sliding white pill with soft elevation shadow and subtle text ink color transitions (`text-[13px] font-medium text-[#09090b]`).
+- [x] Mount in `frontend/src/app/admin/petak-baru/page.tsx` replacing inline tabs.
+- [x] Ensure full keyboard accessibility and touch responsiveness.

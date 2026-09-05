@@ -5,10 +5,10 @@ Extract and implement the spatial file dropzone into an isolated, lightweight co
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** closed
 
-- [ ] Create isolated component `frontend/src/components/plot/SpatialDropzone.tsx` with props: `onFileUpload: (file: File) => void`, `loading: boolean`, `label: string`, `acceptedFormats?: string`, `compact?: boolean`.
-- [ ] Implement pure white canvas dropzone with `rounded-[21px]` Fibonacci radius, subtle border transition, and soft hover state (`hover:bg-[#ecfdf5]/20`).
-- [ ] Add circular pill avatar with sage icon (`size-[42px] rounded-full bg-[#ecfdf5] text-[#059669]`).
-- [ ] Render elegant editorial typography instructions: "Tarik & lepas berkas KML / KMZ / GeoJSON" with subtle secondary label.
-- [ ] Mount in `frontend/src/app/admin/petak-baru/page.tsx` for both Single and Batch mode.
+- [x] Create isolated component `frontend/src/components/plot/SpatialDropzone.tsx` with props: `onFileUpload: (file: File) => void`, `loading: boolean`, `label: string`, `acceptedFormats?: string`, `compact?: boolean`.
+- [x] Implement pure white canvas dropzone with `rounded-[21px]` Fibonacci radius, subtle border transition, and soft hover state (`hover:bg-[#ecfdf5]/20`).
+- [x] Add circular pill avatar with sage icon (`size-[42px] rounded-full bg-[#ecfdf5] text-[#059669]`).
+- [x] Render elegant editorial typography instructions: "Tarik & lepas berkas KML / KMZ / GeoJSON" with subtle secondary label.
+- [x] Mount in `frontend/src/app/admin/petak-baru/page.tsx` for both Single and Batch mode.

@@ -32,6 +32,13 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
+import {
+  ModeSegmentedControl,
+  SpatialDropzone,
+  BatchSummaryCard,
+  BatchRecordsTable,
+  BatchCompletionModal,
+} from "@/components/plot";
 import { api } from "@/lib/api";
 import {
   Company,
@@ -896,7 +903,7 @@ export default function PetakBaruPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-[#fbfbfb] flex flex-col">
       <Navbar />
 
       {/* Main Workspace Layout */}
@@ -905,28 +912,29 @@ export default function PetakBaruPage() {
         <div
           className={`${
             activeTab === "batch"
-              ? "w-full lg:w-[480px] xl:w-[560px]"
-              : "w-full lg:w-96 xl:w-[420px]"
-          } bg-white border-r border-slate-200 flex flex-col h-auto lg:h-[calc(100vh-64px)] overflow-y-auto z-10 shadow-lg transition-all duration-200`}
+              ? "w-full lg:w-[550px] xl:w-[610px]"
+              : "w-full lg:w-[377px] xl:w-[377px]"
+          } bg-white border-r border-black/[0.06] flex flex-col h-auto lg:h-[calc(100vh-64px)] overflow-y-auto z-10 transition-all duration-300 shadow-sm`}
         >
-          <div className="p-5 border-b border-slate-100 bg-slate-50/50">
+          {/* Apple Editorial Header */}
+          <div className="px-[21px] py-[21px] lg:py-[28px] border-b border-black/[0.06] bg-[#fbfbfb]/80 backdrop-blur-sm">
             <div className="flex items-center justify-between mb-2">
               <Link
                 href="/peta"
-                className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-emerald-700 transition-colors"
+                className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#71717a] hover:text-[#09090b] transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Kembali ke Peta Lahan</span>
               </Link>
-              <span className="text-xs font-semibold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">
+              <span className="text-[11px] font-medium px-2.5 py-0.5 bg-[#ecfdf5] text-[#059669] border border-[#a7f3d0] rounded-full">
                 SaaS Pertanian
               </span>
             </div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              <Sprout className="w-5 h-5 text-emerald-600" />
+            <h1 className="font-serif text-[24px] font-medium tracking-[-0.025em] text-[#09090b] flex items-center gap-2.5">
+              <Sprout className="w-5 h-5 text-[#059669]" />
               <span>{activeTab === "batch" ? "Impor Massal Petak (Batch)" : "Daftar Petak Baru"}</span>
             </h1>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-[13px] text-[#71717a] font-normal leading-relaxed mt-1">
               {activeTab === "batch"
                 ? "Unggah berkas KML / KMZ / GeoJSON multi-poligon untuk mendaftarkan banyak petak sekaligus."
                 : "Gambar batas poligon di peta lalu lengkapi informasi agronomis petak."}
@@ -934,42 +942,19 @@ export default function PetakBaruPage() {
           </div>
 
           {/* Mode Switcher Tabs */}
-          <div className="flex bg-slate-100 p-1 rounded-xl mx-5 mt-4 border border-slate-200 gap-1">
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("single");
+          <div className="px-[21px] pt-[21px]">
+            <ModeSegmentedControl
+              activeTab={activeTab}
+              onChange={(tab) => {
+                setActiveTab(tab);
                 setErrorMessage(null);
               }}
-              className={`flex-1 py-1.5 px-3 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                activeTab === "single"
-                  ? "bg-white text-emerald-800 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>Petak Tunggal</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("batch");
-                setErrorMessage(null);
-              }}
-              className={`flex-1 py-1.5 px-3 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                activeTab === "batch"
-                  ? "bg-white text-emerald-800 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <UploadCloud className="w-3.5 h-3.5" />
-              <span>Impor Massal (Batch KML)</span>
-            </button>
+            />
           </div>
 
           {/* Error Message */}
           {errorMessage && (
-            <div className="mx-5 mt-3 p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-start gap-2">
+            <div className="mx-[21px] mt-3 p-3 bg-rose-50 border border-rose-200 text-rose-800 text-[12px] rounded-[13px] flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
               <span>{errorMessage}</span>
             </div>
@@ -980,27 +965,27 @@ export default function PetakBaruPage() {
             <>
               {/* Success Notification Banner */}
               {successPlot && (
-                <div className="p-4 bg-emerald-50 border-b border-emerald-200 text-emerald-800 text-sm">
+                <div className="p-4 bg-[#ecfdf5] border-b border-[#a7f3d0] text-[#059669] text-sm">
                   <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                    <CheckCircle2 className="w-5 h-5 text-[#059669] flex-shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <p className="font-semibold text-emerald-900">
+                      <p className="font-semibold text-[#09090b]">
                         Petak &quot;{successPlot.name}&quot; Berhasil Didaftarkan!
                       </p>
-                      <p className="text-xs text-emerald-700 mt-0.5">
-                        Luas: <span className="font-bold">{successPlot.area_hectares} ha</span> | Tanaman:{" "}
-                        <span className="capitalize font-semibold">{successPlot.crop_type}</span>
+                      <p className="text-xs text-[#71717a] mt-0.5">
+                        Luas: <span className="font-bold text-[#09090b]">{successPlot.area_hectares} ha</span> | Tanaman:{" "}
+                        <span className="capitalize font-semibold text-[#09090b]">{successPlot.crop_type}</span>
                       </p>
                       <div className="mt-3 flex items-center gap-2">
                         <Link
                           href={`/petak/${successPlot.id}`}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold shadow-sm transition-colors"
+                          className="px-3.5 py-1.5 bg-[#059669] hover:bg-[#047857] text-white rounded-full text-xs font-semibold shadow-xs transition-all"
                         >
                           Buka Detail Petak &rarr;
                         </Link>
                         <Link
                           href="/peta"
-                          className="px-3 py-1.5 bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-50 rounded text-xs font-medium transition-colors"
+                          className="px-3.5 py-1.5 bg-white border border-black/[0.08] text-[#09090b] hover:bg-[#f4f4f5] rounded-full text-xs font-medium transition-colors"
                         >
                           Peta Lahan
                         </Link>
@@ -1014,7 +999,7 @@ export default function PetakBaruPage() {
                             setCalculatedAreaHa(0);
                             setImportedFileInfo(null);
                           }}
-                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-medium transition-colors"
+                          className="px-3.5 py-1.5 bg-[#f4f4f5] hover:bg-[#e4e4e7] text-[#71717a] rounded-full text-xs font-medium transition-colors"
                         >
                           Tambah Lain
                         </button>
@@ -1025,132 +1010,55 @@ export default function PetakBaruPage() {
               )}
 
               {/* Registration Form */}
-              <form onSubmit={handleSubmitPlot} className="p-5 space-y-4 flex-1">
-                {/* Wave 7: KML / KMZ / GeoJSON File Dropzone */}
-                <div className="space-y-2 p-3.5 bg-emerald-50/40 rounded-xl border border-emerald-200">
+              <form onSubmit={handleSubmitPlot} className="p-[21px] space-y-[21px] flex-1">
+                {/* Wave 7 & 9: Beautiful UI Canvas Dropzone */}
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-950 uppercase tracking-wider">
-                      <UploadCloud className="w-4 h-4 text-emerald-600" />
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#71717a] uppercase tracking-wider">
+                      <UploadCloud className="w-3.5 h-3.5 text-[#059669]" />
                       <span>Impor Berkas Geospasial</span>
                     </div>
-                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                    <span className="text-[10px] font-semibold text-[#059669] bg-[#ecfdf5] border border-[#a7f3d0] px-2 py-0.5 rounded-full">
                       KML / KMZ / GeoJSON
                     </span>
                   </div>
 
-                  {!importedFileInfo ? (
-                    <div
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        setIsDragging(true);
-                      }}
-                      onDragLeave={() => setIsDragging(false)}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        setIsDragging(false);
-                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                          handleFileUpload(e.dataTransfer.files[0]);
-                        }
-                      }}
-                      onClick={() => fileInputRef.current?.click()}
-                      className={`relative border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all ${
-                        isDragging
-                          ? "border-emerald-500 bg-emerald-100/50 scale-[0.99]"
-                          : "border-slate-300 hover:border-emerald-400 hover:bg-emerald-50/50 bg-white"
-                      }`}
-                    >
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".kml,.kmz,.geojson,.json"
-                        className="hidden"
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files[0]) {
-                            handleFileUpload(e.target.files[0]);
+                  <SpatialDropzone
+                    onFileUpload={handleFileUpload}
+                    loading={uploadLoading}
+                    label="Tarik & lepas berkas KML / KMZ / GeoJSON"
+                    sublabel="atau pilih dari komputer"
+                    fileInfo={
+                      importedFileInfo
+                        ? {
+                            fileName: importedFileInfo.fileName,
+                            format: importedFileInfo.format,
+                            vertexCount: importedFileInfo.vertexCount,
+                            areaHa: importedFileInfo.areaHa,
+                            warnings: importedFileInfo.warnings,
                           }
-                        }}
-                      />
-                      {uploadLoading ? (
-                        <div className="flex flex-col items-center justify-center py-2 space-y-2">
-                          <RefreshCw className="w-6 h-6 text-emerald-600 animate-spin" />
-                          <p className="text-xs font-semibold text-emerald-900">
-                            Memvalidasi & mengekstrak koordinat poligon...
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center space-y-1.5">
-                          <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700">
-                            <FileCode className="w-5 h-5" />
-                          </div>
-                          <p className="text-xs font-semibold text-slate-800">
-                            Tarik & lepas berkas KML / KMZ / GeoJSON
-                          </p>
-                          <p className="text-[11px] text-slate-500">
-                            atau <span className="text-emerald-700 font-semibold underline">pilih dari komputer</span>
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-white rounded-lg border border-emerald-300 space-y-2">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-2">
-                          <FileCheck className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-xs font-bold text-slate-900 line-clamp-1">
-                              {importedFileInfo.fileName}
-                            </p>
-                            <p className="text-[11px] text-emerald-700">
-                              Format: <span className="font-semibold">{importedFileInfo.format}</span> • {importedFileInfo.vertexCount} titik batas • {importedFileInfo.areaHa.toFixed(4)} Ha
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleResetImport}
-                          className="p-1 hover:bg-slate-100 text-slate-400 hover:text-rose-600 rounded transition-colors"
-                          title="Reset berkas"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      {importedFileInfo.warnings && importedFileInfo.warnings.length > 0 && (
-                        <div className="text-[10px] text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-200">
-                          {importedFileInfo.warnings.join(", ")}
-                        </div>
-                      )}
-
-                      <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                        <span className="text-[10px] text-slate-500">Kamera peta dipusatkan otomatis</span>
-                        <button
-                          type="button"
-                          onClick={handleResetImport}
-                          className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline"
-                        >
-                          Reset Berkas
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                        : null
+                    }
+                    onReset={handleResetImport}
+                  />
                 </div>
 
                 {/* 1. Hierarchy Selectors */}
-                <div className="space-y-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    <Building2 className="w-3.5 h-3.5 text-emerald-600" />
+                <div className="space-y-[13px] p-[16px] bg-[#fcfdfd] rounded-[21px] border border-black/[0.06]">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#71717a] uppercase tracking-wider">
+                    <Building2 className="w-3.5 h-3.5 text-[#059669]" />
                     <span>Hierarki Lokasi Petak</span>
                   </div>
 
                   {/* Perusahaan */}
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                    <label className="block text-[11px] font-medium text-[#71717a] mb-1">
                       Perusahaan
                     </label>
                     <select
                       value={selectedCompanyId}
                       onChange={(e) => setSelectedCompanyId(Number(e.target.value) || "")}
-                      className="w-full text-xs rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 bg-white"
+                      className="w-full text-[12px] rounded-[10px] border border-black/[0.08] bg-white px-2.5 py-1.5 text-[#09090b] focus:border-[#059669] focus:ring-1 focus:ring-[#059669]"
                       required
                     >
                       <option value="">-- Pilih Perusahaan --</option>
@@ -1164,14 +1072,14 @@ export default function PetakBaruPage() {
 
                   {/* Estate */}
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                    <label className="block text-[11px] font-medium text-[#71717a] mb-1">
                       Perkebunan / Estate
                     </label>
                     <select
                       value={selectedEstateId}
                       onChange={(e) => setSelectedEstateId(Number(e.target.value) || "")}
                       disabled={!selectedCompanyId || estates.length === 0}
-                      className="w-full text-xs rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 bg-white disabled:bg-slate-100"
+                      className="w-full text-[12px] rounded-[10px] border border-black/[0.08] bg-white px-2.5 py-1.5 text-[#09090b] focus:border-[#059669] focus:ring-1 focus:ring-[#059669] disabled:bg-[#f4f4f5] disabled:text-[#a1a1aa]"
                       required
                     >
                       <option value="">-- Pilih Estate --</option>
@@ -1185,14 +1093,14 @@ export default function PetakBaruPage() {
 
                   {/* Divisi */}
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                    <label className="block text-[11px] font-medium text-[#71717a] mb-1">
                       Divisi / Afdeling
                     </label>
                     <select
                       value={selectedDivisionId}
                       onChange={(e) => setSelectedDivisionId(Number(e.target.value) || "")}
                       disabled={!selectedEstateId || divisions.length === 0}
-                      className="w-full text-xs rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 bg-white disabled:bg-slate-100"
+                      className="w-full text-[12px] rounded-[10px] border border-black/[0.08] bg-white px-2.5 py-1.5 text-[#09090b] focus:border-[#059669] focus:ring-1 focus:ring-[#059669] disabled:bg-[#f4f4f5] disabled:text-[#a1a1aa]"
                       required
                     >
                       <option value="">-- Pilih Divisi --</option>
@@ -1206,9 +1114,9 @@ export default function PetakBaruPage() {
                 </div>
 
                 {/* 2. Plot Name & Agronomics */}
-                <div className="space-y-4">
+                <div className="space-y-[13px] p-[16px] bg-[#fcfdfd] rounded-[21px] border border-black/[0.06]">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label className="block text-[11px] font-medium text-[#71717a] mb-1">
                       Nama Petak Lahan <span className="text-rose-500">*</span>
                     </label>
                     <input
@@ -1216,36 +1124,36 @@ export default function PetakBaruPage() {
                       placeholder="Contoh: Petak A1 - Blok Utara"
                       value={plotName}
                       onChange={(e) => setPlotName(e.target.value)}
-                      className="w-full text-sm rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
+                      className="w-full text-[13px] rounded-[10px] border border-black/[0.08] bg-white px-3 py-2 text-[#09090b] focus:border-[#059669] focus:ring-1 focus:ring-[#059669]"
                       required
                     />
                   </div>
 
                   {/* Crop Type Selector */}
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                    <label className="block text-[11px] font-medium text-[#71717a] mb-1.5">
                       Komoditas Tanaman
                     </label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-[8px]">
                       <button
                         type="button"
                         onClick={() => setCropType("padi")}
-                        className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-xs font-medium transition-all ${
+                        className={`flex items-center justify-center gap-2 py-2 px-3 rounded-[10px] border text-[12px] font-medium transition-all ${
                           cropType === "padi"
-                            ? "bg-emerald-50 border-emerald-600 text-emerald-800 font-semibold shadow-xs"
-                            : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                            ? "bg-[#ecfdf5] border-[#a7f3d0] text-[#059669] font-semibold shadow-xs"
+                            : "border-black/[0.08] text-[#71717a] hover:bg-[#fcfdfd] bg-white"
                         }`}
                       >
-                        <Sprout className="w-4 h-4 text-emerald-600" />
+                        <Sprout className="w-4 h-4 text-[#059669]" />
                         <span>Padi (Oryza)</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setCropType("jagung")}
-                        className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-xs font-medium transition-all ${
+                        className={`flex items-center justify-center gap-2 py-2 px-3 rounded-[10px] border text-[12px] font-medium transition-all ${
                           cropType === "jagung"
-                            ? "bg-amber-50 border-amber-600 text-amber-900 font-semibold shadow-xs"
-                            : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                            ? "bg-amber-50 border-amber-200 text-amber-900 font-semibold shadow-xs"
+                            : "border-black/[0.08] text-[#71717a] hover:bg-[#fcfdfd] bg-white"
                         }`}
                       >
                         <Wheat className="w-4 h-4 text-amber-600" />
@@ -1256,13 +1164,13 @@ export default function PetakBaruPage() {
 
                   {/* Variety Dropdown */}
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label className="block text-[11px] font-medium text-[#71717a] mb-1">
                       Varietas Benih
                     </label>
                     <select
                       value={selectedVarietyId}
                       onChange={(e) => setSelectedVarietyId(Number(e.target.value) || "")}
-                      className="w-full text-xs rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 bg-white"
+                      className="w-full text-[12px] rounded-[10px] border border-black/[0.08] bg-white px-2.5 py-1.5 text-[#09090b] focus:border-[#059669] focus:ring-1 focus:ring-[#059669]"
                     >
                       <option value="">-- Pilih Varietas ({cropType}) --</option>
                       {filteredVarieties.map((v) => (
@@ -1274,23 +1182,23 @@ export default function PetakBaruPage() {
                   </div>
 
                   {/* Planting Date & Calculated HST */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-[8px]">
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
+                      <label className="block text-[11px] font-medium text-[#71717a] mb-1">
                         Tanggal Tanam
                       </label>
                       <input
                         type="date"
                         value={plantingDate}
                         onChange={(e) => setPlantingDate(e.target.value)}
-                        className="w-full text-xs rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
+                        className="w-full text-[12px] rounded-[10px] border border-black/[0.08] bg-white px-2.5 py-1.5 text-[#09090b] focus:border-[#059669] focus:ring-1 focus:ring-[#059669]"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        Hari Setelah Tanam (HST)
+                      <label className="block text-[11px] font-medium text-[#71717a] mb-1">
+                        Hari Setelah Tanam
                       </label>
-                      <div className="w-full py-2 px-3 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-emerald-800 text-center">
+                      <div className="w-full py-1.5 px-2.5 bg-[#f4f4f5] border border-black/[0.04] rounded-[10px] text-[12px] font-mono tabular-nums font-semibold text-[#059669] text-center">
                         {currentHstPreview} HST
                       </div>
                     </div>
@@ -1298,43 +1206,43 @@ export default function PetakBaruPage() {
                 </div>
 
                 {/* 3. Polygon Geometry Status Card */}
-                <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-3">
+                <div className="p-[16px] bg-[#fcfdfd] border border-black/[0.06] rounded-[21px] space-y-[13px]">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-emerald-700" />
+                    <span className="text-[11px] font-semibold text-[#71717a] uppercase tracking-wider flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-[#059669]" />
                       <span>Status Poligon Peta</span>
                     </span>
                     <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full ${
                         drawnCoords.length >= 3
-                          ? "bg-emerald-200 text-emerald-900"
-                          : "bg-slate-200 text-slate-700"
+                          ? "bg-[#ecfdf5] text-[#059669] border border-[#a7f3d0]"
+                          : "bg-[#f4f4f5] text-[#71717a]"
                       }`}
                     >
                       {drawnCoords.length} Titik Sudut
                     </span>
                   </div>
 
-                  <div className="bg-white p-3 rounded-lg border border-emerald-100 flex items-center justify-between">
+                  <div className="bg-white p-[13px] rounded-[13px] border border-black/[0.04] flex items-center justify-between shadow-2xs">
                     <div>
-                      <span className="text-[11px] text-slate-500 block">Luas Terhitung:</span>
-                      <span className="text-lg font-extrabold text-emerald-700">
+                      <span className="text-[11px] text-[#71717a] block">Luas Terhitung:</span>
+                      <span className="text-[18px] font-bold text-[#059669] font-mono tabular-nums">
                         {calculatedAreaHa.toFixed(2)}{" "}
-                        <span className="text-xs font-medium text-slate-500">hektar</span>
+                        <span className="text-[12px] font-medium text-[#71717a]">hektar</span>
                       </span>
                     </div>
-                    <div className="text-right text-[11px] text-slate-500">
+                    <div className="text-right text-[12px] text-[#71717a] font-mono tabular-nums">
                       <span>{(calculatedAreaHa * 10000).toLocaleString("id-ID")} m²</span>
                     </div>
                   </div>
 
                   {/* Polygon Controls */}
-                  <div className="flex items-center gap-1.5 pt-1">
+                  <div className="flex items-center gap-[8px] pt-1">
                     <button
                       type="button"
                       onClick={handleClosePolygon}
                       disabled={drawnCoords.length < 3 || isPolygonClosed}
-                      className="flex-1 py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white rounded-md text-xs font-medium transition-colors flex items-center justify-center gap-1"
+                      className="flex-1 h-[36px] px-3 bg-[#059669] hover:bg-[#047857] disabled:bg-[#e4e4e7] disabled:text-[#a1a1aa] text-white rounded-[10px] text-[12px] font-medium transition-all flex items-center justify-center gap-1.5 shadow-2xs"
                     >
                       <Check className="w-3.5 h-3.5" />
                       <span>Tutup Poligon</span>
@@ -1343,7 +1251,7 @@ export default function PetakBaruPage() {
                       type="button"
                       onClick={handleUndoPoint}
                       disabled={drawnCoords.length === 0}
-                      className="py-1.5 px-2 bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-50 text-slate-700 rounded-md text-xs font-medium transition-colors flex items-center justify-center"
+                      className="h-[36px] px-3 bg-white border border-black/[0.08] hover:bg-[#f4f4f5] disabled:opacity-40 text-[#09090b] rounded-[10px] text-[12px] font-medium transition-colors flex items-center justify-center"
                       title="Hapus titik terakhir"
                     >
                       <Undo2 className="w-3.5 h-3.5" />
@@ -1352,7 +1260,7 @@ export default function PetakBaruPage() {
                       type="button"
                       onClick={handleClearPolygon}
                       disabled={drawnCoords.length === 0}
-                      className="py-1.5 px-2 bg-white border border-rose-200 hover:bg-rose-50 disabled:opacity-50 text-rose-700 rounded-md text-xs font-medium transition-colors flex items-center justify-center"
+                      className="h-[36px] px-3 bg-white border border-rose-200 hover:bg-rose-50 disabled:opacity-40 text-rose-600 rounded-[10px] text-[12px] font-medium transition-colors flex items-center justify-center"
                       title="Hapus semua titik"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
@@ -1365,10 +1273,13 @@ export default function PetakBaruPage() {
                   <button
                     type="submit"
                     disabled={loading || drawnCoords.length < 3}
-                    className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-semibold rounded-xl text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
+                    className="w-full h-[42px] px-[21px] bg-[#059669] hover:bg-[#047857] disabled:bg-[#e4e4e7] disabled:text-[#a1a1aa] text-white font-medium rounded-full text-[13px] shadow-[0_1px_2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.22)] active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
                   >
                     {loading ? (
-                      <span>Menyimpan ke Database...</span>
+                      <div className="flex items-center gap-2">
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Menyimpan ke Database...</span>
+                      </div>
                     ) : (
                       <>
                         <Save className="w-4 h-4" />
@@ -1383,454 +1294,126 @@ export default function PetakBaruPage() {
 
           {/* Batch Import Wizard Mode Content */}
           {activeTab === "batch" && (
-            <div className="p-5 space-y-4 flex-1">
-              {/* Batch Success Result Banner */}
-              {batchSuccessResult ? (
-                <div className="p-5 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 text-sm space-y-3 shadow-xs">
-                  <div className="flex items-start gap-2.5">
-                    <CheckCircle2 className="w-6 h-6 text-emerald-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="font-bold text-base text-emerald-950">
-                        Pendaftaran Massal Berhasil!
-                      </p>
-                      <p className="text-xs text-emerald-700 mt-1">
-                        <span className="font-bold">{batchSuccessResult.created_count}</span> petak lahan berhasil didaftarkan dan disimpan secara transaksional ke PostGIS.
-                      </p>
+            <div className="p-[21px] space-y-[21px] flex-1">
+              {/* Destination Hierarchy Selectors */}
+              <div className="space-y-[13px] p-[16px] bg-[#fcfdfd] rounded-[21px] border border-black/[0.06]">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#71717a] uppercase tracking-wider">
+                  <Building2 className="w-3.5 h-3.5 text-[#059669]" />
+                  <span>Divisi Tujuan Pendaftaran Massal</span>
+                </div>
 
-                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs bg-white p-3 rounded-xl border border-emerald-200">
-                        <div>
-                          <span className="text-slate-500 block">Total Luas:</span>
-                          <span className="font-bold text-emerald-900">
-                            {batchSuccessResult.total_area_hectares.toFixed(2)} Ha
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 block">Telemetri Satelit:</span>
-                          <span className="font-bold text-emerald-900">
-                            {batchSuccessResult.satellite_telemetry_backfilled} data (30 hari)
-                          </span>
-                        </div>
-                        <div className="col-span-2 text-[11px] text-emerald-700 flex items-center gap-1.5 pt-1.5 border-t border-slate-100">
-                          <Sparkles className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-                          <span>Cuaca harian Open-Meteo & akumulasi GDD terpropagasi otomatis.</span>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 flex items-center gap-2">
-                        <Link
-                          href="/peta"
-                          className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5"
-                        >
-                          <Map className="w-3.5 h-3.5" />
-                          <span>Buka di Peta Lahan</span>
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={handleResetBatchImport}
-                          className="px-3 py-2 bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-50 rounded-lg text-xs font-medium transition-colors"
-                        >
-                          Impor Berkas Lain
-                        </button>
-                      </div>
-                    </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-[8px]">
+                  {/* Perusahaan */}
+                  <div>
+                    <label className="block text-[10px] font-medium text-[#71717a] mb-1">
+                      Perusahaan
+                    </label>
+                    <select
+                      value={selectedCompanyId}
+                      onChange={(e) => setSelectedCompanyId(Number(e.target.value) || "")}
+                      className="w-full text-[12px] rounded-[10px] border border-black/[0.08] bg-white px-2 py-1.5 text-[#09090b] focus:border-[#059669]"
+                    >
+                      <option value="">-- Pilih --</option>
+                      {companies.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
+
+                  {/* Estate */}
+                  <div>
+                    <label className="block text-[10px] font-medium text-[#71717a] mb-1">
+                      Estate
+                    </label>
+                    <select
+                      value={selectedEstateId}
+                      onChange={(e) => setSelectedEstateId(Number(e.target.value) || "")}
+                      disabled={!selectedCompanyId || estates.length === 0}
+                      className="w-full text-[12px] rounded-[10px] border border-black/[0.08] bg-white px-2 py-1.5 text-[#09090b] focus:border-[#059669] disabled:bg-[#f4f4f5] disabled:text-[#a1a1aa]"
+                    >
+                      <option value="">-- Pilih --</option>
+                      {estates.map((est) => (
+                        <option key={est.id} value={est.id}>
+                          {est.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Divisi */}
+                  <div>
+                    <label className="block text-[10px] font-medium text-[#71717a] mb-1">
+                      Divisi <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={selectedDivisionId}
+                      onChange={(e) => setSelectedDivisionId(Number(e.target.value) || "")}
+                      disabled={!selectedEstateId || divisions.length === 0}
+                      className="w-full text-[12px] rounded-[10px] border border-black/[0.08] bg-white px-2 py-1.5 text-[#09090b] focus:border-[#059669] disabled:bg-[#f4f4f5] disabled:text-[#a1a1aa] font-semibold"
+                    >
+                      <option value="">-- Pilih Divisi --</option>
+                      {divisions.map((div) => (
+                        <option key={div.id} value={div.id}>
+                          {div.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Batch Upload Dropzone when no summary yet */}
+              {!batchSummary ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#71717a] uppercase tracking-wider">
+                      <UploadCloud className="w-3.5 h-3.5 text-[#059669]" />
+                      <span>Unggah Berkas Koleksi Multi-Petak</span>
+                    </div>
+                    <span className="text-[10px] font-semibold text-[#059669] bg-[#ecfdf5] border border-[#a7f3d0] px-2 py-0.5 rounded-full">
+                      KML / KMZ / GeoJSON
+                    </span>
+                  </div>
+                  <SpatialDropzone
+                    onFileUpload={handleBatchFileUpload}
+                    loading={batchUploadLoading}
+                    label="Tarik & lepas berkas KML / KMZ / GeoJSON multi-poligon"
+                    sublabel="atau pilih dari komputer (Folder Placemarks)"
+                    fileInfo={null}
+                  />
                 </div>
               ) : (
                 <>
-                  {/* Destination Hierarchy Selectors */}
-                  <div className="space-y-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      <Building2 className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Divisi Tujuan Pendaftaran Massal</span>
-                    </div>
+                  {/* Batch Summary Card (Task Rows & Quick Bulk) */}
+                  <BatchSummaryCard
+                    summary={batchSummary}
+                    selectedCount={batchRows.filter((r) => r.selected).length}
+                    onReset={handleResetBatchImport}
+                    bulkCropType={batchBulkCropType}
+                    onBulkCropTypeChange={setBatchBulkCropType}
+                    bulkVarietyId={batchBulkVarietyId}
+                    onBulkVarietyIdChange={setBatchBulkVarietyId}
+                    bulkPlantingDate={batchBulkPlantingDate}
+                    onBulkPlantingDateChange={setBatchBulkPlantingDate}
+                    varieties={varieties}
+                    onApplyBulk={handleApplyBatchSettings}
+                  />
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      {/* Perusahaan */}
-                      <div>
-                        <label className="block text-[10px] font-medium text-slate-600 mb-1">
-                          Perusahaan
-                        </label>
-                        <select
-                          value={selectedCompanyId}
-                          onChange={(e) => setSelectedCompanyId(Number(e.target.value) || "")}
-                          className="w-full text-xs rounded-lg border-slate-300 bg-white"
-                        >
-                          <option value="">-- Pilih --</option>
-                          {companies.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Estate */}
-                      <div>
-                        <label className="block text-[10px] font-medium text-slate-600 mb-1">
-                          Estate
-                        </label>
-                        <select
-                          value={selectedEstateId}
-                          onChange={(e) => setSelectedEstateId(Number(e.target.value) || "")}
-                          disabled={!selectedCompanyId || estates.length === 0}
-                          className="w-full text-xs rounded-lg border-slate-300 bg-white disabled:bg-slate-100"
-                        >
-                          <option value="">-- Pilih --</option>
-                          {estates.map((est) => (
-                            <option key={est.id} value={est.id}>
-                              {est.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Divisi */}
-                      <div>
-                        <label className="block text-[10px] font-medium text-slate-600 mb-1">
-                          Divisi / Afdeling <span className="text-rose-500">*</span>
-                        </label>
-                        <select
-                          value={selectedDivisionId}
-                          onChange={(e) => setSelectedDivisionId(Number(e.target.value) || "")}
-                          disabled={!selectedEstateId || divisions.length === 0}
-                          className="w-full text-xs rounded-lg border-slate-300 bg-white disabled:bg-slate-100 font-semibold text-emerald-900"
-                        >
-                          <option value="">-- Pilih Divisi --</option>
-                          {divisions.map((div) => (
-                            <option key={div.id} value={div.id}>
-                              {div.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Batch Upload Dropzone */}
-                  <div className="space-y-2 p-3.5 bg-emerald-50/40 rounded-xl border border-emerald-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-950 uppercase tracking-wider">
-                        <UploadCloud className="w-4 h-4 text-emerald-600" />
-                        <span>Unggah Berkas Koleksi Multi-Petak</span>
-                      </div>
-                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                        KML / KMZ / GeoJSON
-                      </span>
-                    </div>
-
-                    {!batchSummary ? (
-                      <div
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          setBatchIsDragging(true);
-                        }}
-                        onDragLeave={() => setBatchIsDragging(false)}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          setBatchIsDragging(false);
-                          if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                            handleBatchFileUpload(e.dataTransfer.files[0]);
-                          }
-                        }}
-                        onClick={() => batchFileInputRef.current?.click()}
-                        className={`relative border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
-                          batchIsDragging
-                            ? "border-emerald-500 bg-emerald-100/50 scale-[0.99]"
-                            : "border-slate-300 hover:border-emerald-400 hover:bg-emerald-50/50 bg-white"
-                        }`}
-                      >
-                        <input
-                          ref={batchFileInputRef}
-                          type="file"
-                          accept=".kml,.kmz,.geojson,.json"
-                          className="hidden"
-                          onChange={(e) => {
-                            if (e.target.files && e.target.files[0]) {
-                              handleBatchFileUpload(e.target.files[0]);
-                            }
-                          }}
-                        />
-                        {batchUploadLoading ? (
-                          <div className="flex flex-col items-center justify-center py-4 space-y-2">
-                            <RefreshCw className="w-7 h-7 text-emerald-600 animate-spin" />
-                            <p className="text-xs font-semibold text-emerald-900">
-                              Mengekstrak poligon & menghitung topologi spasial...
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center space-y-2">
-                            <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700">
-                              <UploadCloud className="w-6 h-6" />
-                            </div>
-                            <div>
-                              <p className="text-xs font-bold text-slate-800">
-                                Tarik & lepas berkas KML / KMZ / GeoJSON multi-poligon
-                              </p>
-                              <p className="text-[11px] text-slate-500 mt-0.5">
-                                atau <span className="text-emerald-700 font-semibold underline">pilih dari komputer</span> (Folder Placemarks)
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      /* Batch Summary Header Box */
-                      <div className="p-3.5 bg-white rounded-xl border border-emerald-300 space-y-2">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-start gap-2">
-                            <FileCheck className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-                            <div>
-                              <p className="text-xs font-bold text-slate-900 line-clamp-1">
-                                {batchSummary.fileName}
-                              </p>
-                              <p className="text-[11px] text-emerald-700">
-                                Format: <span className="font-semibold">{batchSummary.format}</span> • {batchSummary.totalPlots} Petak Terdeteksi • Total {batchSummary.totalAreaHa.toFixed(2)} Ha
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleResetBatchImport}
-                            className="p-1 hover:bg-slate-100 text-slate-400 hover:text-rose-600 rounded transition-colors"
-                            title="Ganti berkas"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-slate-100">
-                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
-                            <span className="text-[10px] text-slate-500 block">Total Petak</span>
-                            <span className="text-xs font-bold text-slate-800">{batchSummary.totalPlots}</span>
-                          </div>
-                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
-                            <span className="text-[10px] text-slate-500 block">Total Luas</span>
-                            <span className="text-xs font-bold text-emerald-700">{batchSummary.totalAreaHa.toFixed(2)} Ha</span>
-                          </div>
-                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
-                            <span className="text-[10px] text-slate-500 block">Terpilih</span>
-                            <span className="text-xs font-bold text-indigo-700">
-                              {batchRows.filter((r) => r.selected).length} Petak
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Quick Bulk Settings & Review Table when batchSummary exists */}
-                  {batchSummary && batchRows.length > 0 && (
-                    <>
-                      {/* Quick Bulk Controls Card */}
-                      <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                            <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Pengaturan Massal Terpilih</span>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={handleApplyBatchSettings}
-                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-semibold transition-colors shadow-2xs"
-                          >
-                            Terapkan ke Terpilih
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-2">
-                          {/* Bulk Crop */}
-                          <div>
-                            <label className="block text-[10px] font-medium text-slate-500 mb-1">
-                              Komoditas
-                            </label>
-                            <select
-                              value={batchBulkCropType}
-                              onChange={(e) => setBatchBulkCropType(e.target.value as "padi" | "jagung")}
-                              className="w-full text-xs rounded-lg border-slate-300 py-1.5 px-2 bg-white"
-                            >
-                              <option value="padi">Padi</option>
-                              <option value="jagung">Jagung</option>
-                            </select>
-                          </div>
-
-                          {/* Bulk Variety */}
-                          <div>
-                            <label className="block text-[10px] font-medium text-slate-500 mb-1">
-                              Varietas
-                            </label>
-                            <select
-                              value={batchBulkVarietyId}
-                              onChange={(e) => setBatchBulkVarietyId(Number(e.target.value) || "")}
-                              className="w-full text-xs rounded-lg border-slate-300 py-1.5 px-2 bg-white"
-                            >
-                              <option value="">-- Standar --</option>
-                              {varieties
-                                .filter((v) => v.crop_type === batchBulkCropType)
-                                .map((v) => (
-                                  <option key={v.id} value={v.id}>
-                                    {v.name}
-                                  </option>
-                                ))}
-                            </select>
-                          </div>
-
-                          {/* Bulk Planting Date */}
-                          <div>
-                            <label className="block text-[10px] font-medium text-slate-500 mb-1">
-                              Tanggal Tanam
-                            </label>
-                            <input
-                              type="date"
-                              value={batchBulkPlantingDate}
-                              onChange={(e) => setBatchBulkPlantingDate(e.target.value)}
-                              className="w-full text-xs rounded-lg border-slate-300 py-1 px-2 bg-white"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Batch Review Table */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-xs text-slate-600 px-1">
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const allSelected = batchRows.every((r) => r.selected);
-                                handleToggleSelectAll(!allSelected);
-                              }}
-                              className="inline-flex items-center gap-1 font-semibold text-slate-700 hover:text-emerald-700 cursor-pointer"
-                            >
-                              {batchRows.every((r) => r.selected) ? (
-                                <CheckSquare className="w-4 h-4 text-emerald-600" />
-                              ) : (
-                                <Square className="w-4 h-4 text-slate-400" />
-                              )}
-                              <span>Pilih Semua ({batchRows.length})</span>
-                            </button>
-                          </div>
-                          <span className="text-[11px] text-slate-500">
-                            {batchRows.filter((r) => r.selected).length} dari {batchRows.length} aktif
-                          </span>
-                        </div>
-
-                        <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100 max-h-80 overflow-y-auto bg-white shadow-2xs">
-                          {batchRows.map((row, idx) => (
-                            <div
-                              key={row.id}
-                              className={`p-3 transition-colors flex items-center gap-3 ${
-                                row.selected ? "bg-emerald-50/20" : "bg-slate-50/60 opacity-60"
-                              }`}
-                            >
-                              {/* Checkbox */}
-                              <input
-                                type="checkbox"
-                                checked={row.selected}
-                                onChange={() => handleToggleRowSelect(idx)}
-                                className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                              />
-
-                              {/* Row Details */}
-                              <div className="flex-1 min-w-0 space-y-1">
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type="text"
-                                    value={row.name}
-                                    onChange={(e) => handleUpdateRowField(idx, "name", e.target.value)}
-                                    className="text-xs font-semibold text-slate-900 border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-hidden py-0.5 px-1 rounded flex-1 min-w-0 bg-transparent"
-                                    placeholder="Nama Petak"
-                                  />
-                                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded whitespace-nowrap">
-                                    {row.area_hectares.toFixed(2)} Ha
-                                  </span>
-                                </div>
-
-                                <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                                  <select
-                                    value={row.crop_type}
-                                    onChange={(e) =>
-                                      handleUpdateRowField(idx, "crop_type", e.target.value)
-                                    }
-                                    className="text-[11px] py-0.5 px-1.5 rounded border-slate-200 bg-white"
-                                  >
-                                    <option value="padi">Padi</option>
-                                    <option value="jagung">Jagung</option>
-                                  </select>
-
-                                  <select
-                                    value={row.variety_id || ""}
-                                    onChange={(e) =>
-                                      handleUpdateRowField(
-                                        idx,
-                                        "variety_id",
-                                        Number(e.target.value) || ""
-                                      )
-                                    }
-                                    className="text-[11px] py-0.5 px-1.5 rounded border-slate-200 bg-white max-w-[130px] truncate"
-                                  >
-                                    <option value="">Varietas Bawaan</option>
-                                    {varieties
-                                      .filter((v) => v.crop_type === row.crop_type)
-                                      .map((v) => (
-                                        <option key={v.id} value={v.id}>
-                                          {v.name}
-                                        </option>
-                                      ))}
-                                  </select>
-
-                                  {row.warnings && row.warnings.length > 0 && (
-                                    <span
-                                      className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200"
-                                      title={row.warnings.join(", ")}
-                                    >
-                                      Peringatan
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Focus Map Button */}
-                              <button
-                                type="button"
-                                onClick={() => handleFocusBatchPlot(row)}
-                                className="p-1.5 hover:bg-emerald-100 text-slate-400 hover:text-emerald-700 rounded-md transition-colors"
-                                title="Fokuskan peta ke petak ini"
-                              >
-                                <MapPin className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Batch Submit Action */}
-                      <div className="pt-2">
-                        <button
-                          type="button"
-                          onClick={handleSubmitBatchPlots}
-                          disabled={
-                            batchSubmitLoading ||
-                            !selectedDivisionId ||
-                            batchRows.filter((r) => r.selected).length === 0
-                          }
-                          className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-semibold rounded-xl text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
-                        >
-                          {batchSubmitLoading ? (
-                            <div className="flex items-center gap-2">
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                              <span>Mendaftarkan & Mengaktifkan Telemetri...</span>
-                            </div>
-                          ) : (
-                            <>
-                              <Save className="w-4 h-4" />
-                              <span>
-                                Daftarkan {batchRows.filter((r) => r.selected).length} Petak & Aktifkan Telemetri
-                              </span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </>
+                  {/* Batch Review Records Table */}
+                  {batchRows.length > 0 && (
+                    <BatchRecordsTable
+                      rows={batchRows}
+                      varieties={varieties}
+                      onToggleSelectAll={handleToggleSelectAll}
+                      onToggleRowSelect={handleToggleRowSelect}
+                      onUpdateField={handleUpdateRowField}
+                      onFocusPlot={handleFocusBatchPlot}
+                      onSubmit={handleSubmitBatchPlots}
+                      loading={batchSubmitLoading}
+                      disabled={!selectedDivisionId}
+                    />
                   )}
                 </>
               )}
@@ -1839,15 +1422,15 @@ export default function PetakBaruPage() {
         </div>
 
         {/* Right Side: Interactive Mapbox Map */}
-        <div className="flex-1 relative h-[500px] lg:h-[calc(100vh-64px)] w-full bg-slate-900">
+        <div className="flex-1 relative h-[500px] lg:h-[calc(100vh-64px)] w-full bg-slate-100 border-l border-black/[0.06]">
           {/* Map Container */}
           <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
 
           {/* Map Floating Top Toolbar */}
           <div className="absolute top-4 left-4 z-10 flex flex-wrap items-center gap-2 pointer-events-auto">
             {/* Drawing Instructions Badge */}
-            <div className="px-3 py-1.5 bg-white/95 backdrop-blur-md rounded-lg shadow-md border border-slate-200 text-xs font-medium text-slate-800 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+            <div className="px-3.5 py-2 bg-white/85 backdrop-blur-xl rounded-full shadow-sm border border-black/[0.06] text-[12px] font-medium text-[#09090b] flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#059669] animate-pulse" />
               <span>
                 {activeTab === "batch"
                   ? batchRows.length === 0
@@ -1862,14 +1445,14 @@ export default function PetakBaruPage() {
             </div>
 
             {/* Map Style Selector */}
-            <div className="flex items-center bg-white/95 backdrop-blur-md rounded-lg shadow-md border border-slate-200 p-0.5">
+            <div className="flex items-center bg-white/85 backdrop-blur-xl rounded-full shadow-sm border border-black/[0.06] p-1 gap-1">
               <button
                 type="button"
                 onClick={() => toggleMapStyle("satellite")}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                className={`px-3 py-1 text-[12px] font-medium rounded-full transition-all ${
                   mapStyleType === "satellite"
-                    ? "bg-emerald-600 text-white font-semibold"
-                    : "text-slate-700 hover:bg-slate-100"
+                    ? "bg-[#059669] text-white shadow-xs"
+                    : "text-[#71717a] hover:text-[#09090b]"
                 }`}
               >
                 Satelit
@@ -1877,10 +1460,10 @@ export default function PetakBaruPage() {
               <button
                 type="button"
                 onClick={() => toggleMapStyle("streets")}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                className={`px-3 py-1 text-[12px] font-medium rounded-full transition-all ${
                   mapStyleType === "streets"
-                    ? "bg-emerald-600 text-white font-semibold"
-                    : "text-slate-700 hover:bg-slate-100"
+                    ? "bg-[#059669] text-white shadow-xs"
+                    : "text-[#71717a] hover:text-[#09090b]"
                 }`}
               >
                 Vektor
@@ -1889,16 +1472,23 @@ export default function PetakBaruPage() {
           </div>
 
           {/* Map Floating Bottom Helper */}
-          <div className="absolute bottom-6 left-6 z-10 hidden sm:flex items-center gap-3 bg-slate-900/80 backdrop-blur-md text-white px-3 py-2 rounded-lg text-xs shadow-lg border border-slate-700/50">
+          <div className="absolute bottom-6 left-6 z-10 hidden sm:flex items-center gap-3 bg-white/85 backdrop-blur-xl text-[#09090b] px-3.5 py-1.5 rounded-full text-[11.5px] font-medium shadow-sm border border-black/[0.06]">
             <div className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-full bg-emerald-500 border border-white" />
+              <span className="w-2.5 h-2.5 rounded-full bg-[#059669]" />
               <span>Titik Sudut Batas Petak</span>
             </div>
-            <span className="text-slate-500">|</span>
+            <span className="text-black/20">|</span>
             <span>Luas dihitung presisi geodesik WGS84</span>
           </div>
         </div>
       </main>
+
+      {/* Wave 9: Batch Completion Modal */}
+      <BatchCompletionModal
+        result={batchSuccessResult}
+        onClose={() => setBatchSuccessResult(null)}
+        onReset={handleResetBatchImport}
+      />
     </div>
   );
 }

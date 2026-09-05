@@ -5,10 +5,10 @@ Refactor the global layout structure of `/admin/petak-baru` to establish a 100% 
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** closed
 
-- [ ] Remove all legacy dark classes (`bg-slate-900`, dark border classes, inverted text colors) from the page layout and main wrapper.
-- [ ] Apply Fibonacci grid dimensions: left panel width `w-[377px]` in Single Mode and dynamic expand to `w-[550px]` / `w-[610px]` in Batch Mode.
-- [ ] Implement Fibonacci padding scale (`px-[21px] py-[34px]`) and hairline borders (`border-black/[0.06]`).
-- [ ] Implement Apple Editorial header typography with modern serif title (`font-serif text-[24px] font-medium tracking-[-0.025em] text-[#09090b]`) and gentle subtitle (`text-[13px] text-[#71717a]`).
-- [ ] Verify light theme navbar compatibility and seamless visual flow.
+- [x] Remove all legacy dark classes (`bg-slate-900`, dark border classes, inverted text colors) from the page layout and main wrapper.
+- [x] Apply Fibonacci grid dimensions: left panel width `w-[377px]` in Single Mode and dynamic expand to `w-[550px]` / `w-[610px]` in Batch Mode.
+- [x] Implement Fibonacci padding scale (`px-[21px] py-[34px]`) and hairline borders (`border-black/[0.06]`).
+- [x] Implement Apple Editorial header typography with modern serif title (`font-serif text-[24px] font-medium tracking-[-0.025em] text-[#09090b]`) and gentle subtitle (`text-[13px] text-[#71717a]`).
+- [x] Verify light theme navbar compatibility and seamless visual flow.

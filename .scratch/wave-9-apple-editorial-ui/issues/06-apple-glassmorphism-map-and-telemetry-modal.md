@@ -5,11 +5,11 @@ Extract and implement the post-registration completion state into `frontend/src/
 
 **Blocked by:** 05
 
-**Status:** ready-for-agent
+**Status:** closed
 
-- [ ] Create isolated component `frontend/src/components/plot/BatchCompletionModal.tsx` with props: `result: PlotBatchCreateResponse | null`, `onClose: () => void`.
-- [ ] Implement Beautiful UI-style Completion Modal: centered with soft blur backdrop, `rounded-[24px]` card, circular check avatar, tabular metrics, and primary action button.
-- [ ] Transform Mapbox floating top badge and style toggle into frosted glassmorphism pills (`bg-white/85 backdrop-blur-xl border border-black/[0.06] shadow-sm rounded-full`).
-- [ ] Refactor bottom map helper into a light glassmorphism capsule.
-- [ ] Mount modal in `frontend/src/app/admin/petak-baru/page.tsx`.
-- [ ] Run backend test suite (`python -m unittest discover -s tests -p "test_*.py"`) and verify all 123 tests pass.
+- [x] Create isolated component `frontend/src/components/plot/BatchCompletionModal.tsx` with props: `result: PlotBatchCreateResponse | null`, `onClose: () => void`.
+- [x] Implement Beautiful UI-style Completion Modal: centered with soft blur backdrop, `rounded-[24px]` card, circular check avatar, tabular metrics, and primary action button.
+- [x] Transform Mapbox floating top badge and style toggle into frosted glassmorphism pills (`bg-white/85 backdrop-blur-xl border border-black/[0.06] shadow-sm rounded-full`).
+- [x] Refactor bottom map helper into a light glassmorphism capsule.
+- [x] Mount modal in `frontend/src/app/admin/petak-baru/page.tsx`.
+- [x] Run backend test suite (`python -m unittest discover -s tests -p "test_*.py"`) and verify all 123 tests pass.
