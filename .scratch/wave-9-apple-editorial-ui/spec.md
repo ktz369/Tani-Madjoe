@@ -37,13 +37,15 @@ Mentransformasikan seluruh antarmuka `/admin/petak-baru` menjadi **100% Light Mo
    - Subjudul dan petunjuk menggunakan sans-serif Apple yang santun: `font-sans text-[13px] text-[#71717a] font-normal leading-relaxed`.
    - Angka metrik dan luas spasial menggunakan font monospace tabular: `font-mono text-[13px] tabular-nums font-semibold text-[#09090b]`.
 
-4. **Integrasi Kode Komponen Murni Beautiful UI (`https://www.beautifului.dev/`):**
-   - **Pill Segmented Control (dari `loading-state` & `selection-actions`):** Kontainer pill bulat `bg-[#f4f4f5] rounded-full p-[3px] border border-black/[0.04]` dengan sliding white pill `bg-white text-[#09090b] shadow-[0_1px_3px_rgba(0,0,0,0.08)]`.
-   - **Canvas Dropzone:** Area dropzone berkanvas putih bersih dengan batas putus-putus mikro halus, avatar sirkular hijau sage, dan teks instruksi bernada editorial.
-   - **Task Row Summary Card (dari `#06 task-rows`):** Kartu ringkasan `rounded-[21px] bg-white border border-black/[0.06] shadow-card` yang memuat ikon status selesai/loading, total petak terdeteksi, dan pill badge luas tabular.
-   - **Records Table Grid (dari `#12 records-table`):** Tabel peninjauan dengan header clean abu-abu halus, pembatas baris *hairline* `divide-black/[0.04]`, padding sel tepat 13px Fibonacci, checkbox berpenanda emerald, dan kontrol inline.
-   - **Glassmorphic Map Controls & Legend:** Floating bar di atas peta satelit menggunakan kaca es terang Apple (`bg-white/80 backdrop-blur-xl border border-black/[0.06] text-[#09090b] shadow-sm`).
-   - **Crafted Action Buttons (dari Primitif Beautiful UI):** Tombol hijau emerald ber-highlight spekular mikro `shadow-[0_1px_2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.22)] active:scale-[0.98]`.
+4. **Arsitektur Komponen Ringan & Terisolasi (*Modular Component Extraction*):**
+   Untuk memastikan setiap *fleet worker* mengerjakan tugas yang ringan (*low cognitive load*, ~60-120 baris per file) tanpa risiko konflik di file raksasa `page.tsx`:
+   - Komponen diekstrak ke berkas mandiri di `frontend/src/components/plot/`:
+     - `ModeSegmentedControl.tsx` (Pill Switcher Beautiful UI, ~60 baris)
+     - `SpatialDropzone.tsx` (Canvas Dropzone Beautiful UI, ~90 baris)
+     - `BatchSummaryCard.tsx` (Task Row Beautiful UI #06, ~110 baris)
+     - `BatchRecordsTable.tsx` (Records Table Beautiful UI #12, ~130 baris)
+     - `BatchCompletionModal.tsx` (Approval Card Beautiful UI #04, ~80 baris)
+   - `page.tsx` disederhanakan menjadi orkestrator state dan listener Mapbox yang ramping dan bersih.
 
 ---
 
