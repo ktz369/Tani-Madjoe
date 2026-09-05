@@ -1,88 +1,79 @@
-# Dokumen Handoff Sesi 5: SaaS Platform Monitoring Pertanian Presisi "Tani"
+# Dokumen Handoff Sesi 6: SaaS Platform Monitoring Pertanian Presisi "Tani"
 
 **Status Proyek:** 
 - **Fase Fondasi (Wave 1 s/d Wave 6):** 100% Selesai (Tiket 01 s/d Tiket 17)
 - **Fase Ekstensi Geospasial (Wave 7 — KML/KMZ/GeoJSON Import Pipeline):** 100% Selesai (Tiket 01 s/d Tiket 06)
-- **Fase Sinkronisasi Lanjutan & Impor Massal (Wave 8 — Auto-Centroid, Satellite Backfill & Batch Wizard):** 100% Selesai (Tiket 01 s/d Tiket 06, 123 Passed/Verified Tests)
+- **Fase Sinkronisasi Lanjutan & Impor Massal (Wave 8 — Auto-Centroid, Satellite Backfill & Batch Wizard):** 100% Selesai (Tiket 01 s/d Tiket 06, 123 Passed Tests)
+- **Fase Desain Apple Editorial, Komposisi Fibonacci & Beautiful UI (Wave 9 — 100% Pure Light Mode):** Siap Implementasi (Spec & 6 Tiket Komponen Modular di `/implement`)
 **Tanggal:** 5 September 2026  
-**Lingkup:** Backend FastAPI (PostGIS/SQLAlchemy Async + Alembic), Frontend Next.js 14 App Router (Tailwind CSS, Mapbox GL JS, Recharts), Processing Pipeline (GEE, Open-Meteo, FAO-56 Penman-Monteith, GDD Jagung & Padi, Alert Engine 4 Aturan, ReportLab PDF, CSV Export, SMTP Email Notification), APScheduler Cron Jobs, serta Fitur Impor Geospasial KML/KMZ/GeoJSON Tunggal & Massal (Multi-Placemark Batch Import Wizard, Auto-Centroid GPS Estate, dan 30-Day Historical Satellite Backfill).
+**Lingkup:** Backend FastAPI (PostGIS/SQLAlchemy Async + Alembic), Frontend Next.js 14 App Router (Tailwind CSS, Mapbox GL JS, Recharts), Processing Pipeline (GEE, Open-Meteo, FAO-56 Penman-Monteith, GDD Jagung & Padi, Alert Engine 4 Aturan, ReportLab PDF, CSV Export, SMTP Email Notification), APScheduler Cron Jobs, serta Fitur Impor Geospasial KML/KMZ/GeoJSON Tunggal & Massal.
 
 ---
 
-## 1. Ringkasan Eksekutif & Status Terkini Sesi 5 (Wave 8 Selesai)
+## 1. Instruksi Eksekusi Sesi Berikutnya (`/implement`)
 
-Pada sesi ini, seluruh rangkaian **Wave 8 (Tiket 01 s/d Tiket 06)** telah berhasil diimplementasikan secara tuntas (*end-to-end*):
+Pada sesi berikutnya, agen dapat langsung mengeksekusi Wave 9 dengan perintah:
+```bash
+/implement D:\PEREWANGAN 369\Tani\handoff\HANDOFF.md . Pakai fleet worker. Kasih auto approve. HARUS AUTO APPROVE
+```
 
-1. **Auto-Centroid Estate Geolocation & Weather Propagation (Tiket 01):**
-   - Layanan `backend/app/services/estate_service.py` mengimplementasikan `ensure_estate_centroid_from_polygon` dan `handle_plot_estate_weather_sync`.
-   - Ketika petak pertama didaftarkan pada divisi di suatu Estate yang belum memiliki koordinat GPS, titik sentroid poligon `[lng, lat]` otomatis ditetapkan sebagai koordinat GPS Estate (`estate.location_point`) dan memicu sinkronisasi cuaca Open-Meteo serta perhitungan $ET_0$.
+### Urutan Eksekusi Frontier & Dependensi Tiket:
+```mermaid
+graph TD
+    T1["Tiket 01: Layout & Golden Grid (377px / 610px)"] --> T2["Tiket 02: ModeSegmentedControl.tsx"]
+    T1 --> T3["Tiket 03: SpatialDropzone.tsx"]
+    T2 --> T4["Tiket 04: BatchSummaryCard.tsx"]
+    T3 --> T4
+    T4 --> T5["Tiket 05: BatchRecordsTable.tsx"]
+    T5 --> T6["Tiket 06: BatchCompletionModal.tsx & Verifikasi 123 Tests"]
+```
 
-2. **Multi-Placemark KML & GeoJSON Collection Parser (Tiket 02):**
-   - `backend/app/utils/kml_parser.py` diperluas dengan fungsi `parse_multi_kml_content`, `parse_multi_geojson_content`, `parse_multi_kmz_content`, dan `parse_multi_spatial_file`.
-   - Mendeteksi seluruh `<Placemark>` yang memiliki poligon dalam berkas KML/KMZ atau `FeatureCollection` GeoJSON, menghitung luas geodesik masing-masing petak, total luas kumulatif, serta menghitung *unified bounding box* `[min_lng, min_lat, max_lng, max_lat]`.
-
-3. **Batch Spatial Import Preview & Validation API (Tiket 03):**
-   - Endpoint `POST /api/plots/batch-import-preview` (dan alias `/api/plots/batch-parse-kml`) menerima berkas multi-placemark via multipart atau JSON payload.
-   - Mengembalikan skema `PlotBatchImportPreviewResponse` berisi daftar `PlotBatchItemPreview`, bounding box gabungan, dan indikator validitas topologi.
-
-4. **30-Day Historical Satellite Telemetry Backfill Pipeline (Tiket 04):**
-   - Layanan `backend/app/services/satellite_backfill_service.py` mengimplementasikan fungsi `generate_historical_spectral_data` dan `backfill_satellite_indices_for_plot`.
-   - Mengisi tabel `spectral_indices` dengan runtun waktu 30 hari ke belakang (interval 5 hari = 6 titik observasi) menggunakan kurva fenologi vegetasi sigmoidal realistis (NDVI 0.20–0.85, NDRE, NDWI, SAVI, BSI, SAR VV/VH), sehingga visualisasi grafik langsung terisi lengkap saat petak baru didaftarkan.
-
-5. **Frontend Batch Import Wizard & Multi-Polygon Mapbox Viewer (Tiket 05):**
-   - Antarmuka di `frontend/src/app/admin/petak-baru/page.tsx` dilengkapi tab switcher ("Petak Tunggal" vs "Impor Massal (Batch KML)").
-   - Sidebar kiri yang responsif menampilkan dropzone koleksi multi-poligon, summary card (total petak & luas total), kontrol massal cepat ("Terapkan ke Terpilih" untuk varietas dan tanggal tanam), tabel review dengan checkbox toggle all, edit nama, dan tombol fokus peta.
-   - Peta Mapbox GL JS merender seluruh poligon batch secara reaktif (`batch-polygons-fill`, `batch-polygons-line`) dengan pewarnaan dinamis untuk petak terpilih versus tidak terpilih, serta transisi kamera otomatis `fitBounds(unified_bounding_box)`.
-
-6. **Bulk Plot Registration, Transactional PostGIS Save & Telemetry Activation (Tiket 06):**
-   - Endpoint `POST /api/plots/batch-create` menyimpan seluruh petak terpilih dalam satu transaksi database atomik, menghitung luas geodesik WGS84, memperbarui sentroid estate jika belum ada, memicu cuaca & GDD, serta menjalankan backfill telemetri satelit 30 hari untuk setiap petak.
-   - Frontend menampilkan ringkasan sukses (jumlah petak terdaftar, total luas Ha, jumlah telemetri satelit ter-backfill) dengan tautan langsung ke Peta Lahan (`/peta`).
-
-7. **Verifikasi Test Suite:**
-   - 123 unit tests (115 passed, 8 skipped integration tests, 0 failures) lolos dalam ~1.8s.
-   - Termasuk unit test khusus `test_auto_centroid_estate.py`, `test_multi_kml_parser.py`, `test_batch_preview_api.py`, `test_satellite_backfill.py`, dan `test_batch_create_plots.py`.
+1. **Tiket 01** (`01-pure-light-theme-purge-and-fibonacci-grid.md`): Refaktor layout `page.tsx`, hilangkan `bg-slate-900`, atur grid Fibonacci (`w-[377px]` / `w-[610px]`), dan tipografi Apple Editorial (`font-serif text-[24px]`).
+2. **Tiket 02** (`02-beautifului-segmented-pill-switcher.md`): Buat komponen `frontend/src/components/plot/ModeSegmentedControl.tsx` (~60 baris) dengan pill switch Beautiful UI (`bg-[#f4f4f5] rounded-full p-[3px]`, sliding capsule).
+3. **Tiket 03** (`03-beautifului-canvas-dropzone-uploader.md`): Buat komponen `frontend/src/components/plot/SpatialDropzone.tsx` (~90 baris) dengan pure white canvas dropzone, hairline dashed border, dan avatar sirkular hijau sage.
+4. **Tiket 04** (`04-beautifului-task-rows-summary-card.md`): Buat komponen `frontend/src/components/plot/BatchSummaryCard.tsx` (~110 baris) adopsi Beautiful UI #06 Task Rows (angka tabular-nums, pill badges Ha, dan quick bulk controls).
+5. **Tiket 05** (`05-beautifului-records-table-inline-controls.md`): Buat komponen `frontend/src/components/plot/BatchRecordsTable.tsx` (~130 baris) adopsi Beautiful UI #12 Records Table (padding 13px Fibonacci, hairline dividers, rounded checkboxes, tombol aksi spekular).
+6. **Tiket 06** (`06-apple-glassmorphism-map-and-telemetry-modal.md`): Buat komponen `frontend/src/components/plot/BatchCompletionModal.tsx` (~80 baris), floating glassmorphism map controls (`backdrop-blur-xl bg-white/80`), integrasikan ke `page.tsx`, dan jalankan verifikasi tes suite 123 tes unit.
 
 ---
 
-## 2. Riwayat Lengkap Gelombang & Fitur (Wave 1 s/d Wave 8)
+## 2. Ringkasan Eksekutif Pekerjaan yang Telah Selesai (Wave 8)
 
-| Gelombang | Tiket | Nama Fitur | Status |
-|---|---|---|---|
-| **Wave 1** | 01–03 | Docker Compose, Auth & RBAC, Organization Hierarchy | Selesai |
-| **Wave 2** | 04–06 | Crop Varieties, Plot CRUD PostGIS, Planting Seasons | Selesai |
-| **Wave 3** | 07–09 | GEE Satellite Processor, Weather Fetcher & ET₀, GDD Calculator | Selesai |
-| **Wave 4** | 10–12 | Alert Engine (4 Rules), Main Dashboard, In-App Alert Panel | Selesai |
-| **Wave 5** | 13–15 | Plot Detail Stepper, 16-Day Weather Widget, Timelapse Satellite Overlay | Selesai |
-| **Wave 6** | 16–17 | ReportLab PDF / CSV Reporting, SMTP Email Daily Summary | Selesai |
-| **Wave 7** | 01–06 | KML/KMZ/GeoJSON Parser, Geodesic Area, Import Preview API, Dropzone UI, Mapbox FitBounds, PostGIS Auto-Sync | Selesai |
-| **Wave 8** | 01–06 | Auto-Centroid Estate GPS, Multi-Placemark Parser, Batch Import Preview API, 30-Day Satellite Backfill, Batch Wizard UI, Bulk Registration PostGIS | Selesai |
+Seluruh 6 tiket Wave 8 telah 100% selesai dan terkomit di repositori:
+1. **Auto-Centroid Estate GPS (Tiket 01):** `ensure_estate_centroid_from_polygon` di `backend/app/services/estate_service.py` otomatis mengisi GPS estate dan memicu cuaca Open-Meteo & $ET_0$.
+2. **Multi-Placemark KML & GeoJSON Parser (Tiket 02):** `parse_multi_spatial_file` di `backend/app/utils/kml_parser.py` mengekstrak seluruh poligon, menghitung luas geodesik WGS84, akumulasi total luas, dan *unified bounding box*.
+3. **Batch Spatial Import Preview API (Tiket 03):** Endpoint `POST /api/plots/batch-import-preview` mengembalikan skema `PlotBatchImportPreviewResponse`.
+4. **30-Day Historical Satellite Telemetry Backfill (Tiket 04):** `satellite_backfill_service.py` menghasilkan 6 titik observasi interval 5 hari (30 hari ke belakang) dengan kurva fenologi vegetasi sigmoidal realistis (NDVI 0.20–0.85, NDRE, NDWI, SAVI, BSI, SAR).
+5. **Batch Import Wizard UI & Multi-Polygon Mapbox Viewer (Tiket 05):** Antarmuka di `frontend/src/app/admin/petak-baru/page.tsx` dengan tab switcher, layer Mapbox reaktif (`batch-polygons-fill`, `batch-polygons-line`), dan auto `fitBounds`.
+6. **Bulk Plot Registration & Telemetry Activation (Tiket 06):** Endpoint `POST /api/plots/batch-create` menyimpan seluruh petak dalam satu transaksi database atomik, memperbarui sentroid estate, memicu cuaca/GDD, dan mengeksekusi backfill telemetri satelit 30 hari.
+7. **Verifikasi Suite Uji:** 123 tests (`python -m unittest discover -s tests -p "test_*.py"`) lulus 100% (115 passed, 8 skipped integration tests, 0 failures).
 
 ---
 
-## 3. Perencanaan Wave 9: Apple Editorial UI, Komposisi Fibonacci & Integrasi Murni Beautiful UI (100% Light Mode)
+## 3. Rincian Desain & Arsitektur Wave 9 (Siap Dijalankan)
 
-Sesuai arahan, spesifikasi Wave 9 telah disusun di [`.scratch/wave-9-apple-editorial-ui/spec.md`](file:///D:/PEREWANGAN%20369/Tani/.scratch/wave-9-apple-editorial-ui/spec.md) dan dipecah menjadi **6 tiket kerja terisolasi (*vertical slices*)** di [`.scratch/wave-9-apple-editorial-ui/issues/`](file:///D:/PEREWANGAN%20369/Tani/.scratch/wave-9-apple-editorial-ui/issues/):
-
-1. **Tiket 01:** Pure Light Theme Purge, Apple Editorial Typography & Fibonacci Golden Grid (`w-[377px]`/`w-[610px]`, `px-[21px] py-[34px]`).
-2. **Tiket 02:** Beautiful UI Segmented Pill Switcher & Mode Navigation (`bg-[#f4f4f5] rounded-full` with sliding white capsule).
-3. **Tiket 03:** Beautiful UI Clean Canvas Dropzone & Spatial File Uploader (fine dashed perimeter, sage pill avatar).
-4. **Tiket 04:** Beautiful UI Task Rows & Spatial Summary Metrics Cards (monospaced tabular figures, pill badges).
-5. **Tiket 05:** Beautiful UI Records Table & Inline Plot Controls (13px Fibonacci cell padding, hairline dividers, rounded checkboxes).
-6. **Tiket 06:** Apple-Style Glassmorphism Map Controls, Telemetry Success Modal & Full Verification (123 tests passing).
+* **Spesifikasi:** [`.scratch/wave-9-apple-editorial-ui/spec.md`](file:///D:/PEREWANGAN%20369/Tani/.scratch/wave-9-apple-editorial-ui/spec.md)
+* **Direktori Tiket:** [`.scratch/wave-9-apple-editorial-ui/issues/`](file:///D:/PEREWANGAN%20369/Tani/.scratch/wave-9-apple-editorial-ui/issues/)
+* **Karakteristik Desain:**
+  - **100% Pure Light Theme:** Hapus seluruh kelas gelap (`bg-slate-900`, `border-slate-700`). Background utama `#fbfbfb` / `#ffffff`, border `border-black/[0.06]`.
+  - **Apple Editorial Typography:** Judul `font-serif text-[24px] tracking-[-0.025em] text-[#09090b]` dipadu subtitle santun sans-serif `text-[13px] text-[#71717a]`.
+  - **Harmonic Fibonacci Composition:** Rasio kolom emas `w-[377px]` / `w-[610px]` terhadap peta `987px` (~61.8%). Skala spasi `px-[21px] py-[34px]`, `gap-[21px]`, `gap-[13px]`, `p-[13px]`, `rounded-[21px]`, `rounded-[13px]`.
+  - **Komponen Murni Beautiful UI (`https://www.beautifului.dev/`):**
+    - `ModeSegmentedControl.tsx` (Pill Switcher Beautiful UI, ~60 baris).
+    - `SpatialDropzone.tsx` (Canvas Dropzone Beautiful UI, ~90 baris).
+    - `BatchSummaryCard.tsx` (Task Row Beautiful UI #06, ~110 baris).
+    - `BatchRecordsTable.tsx` (Records Table Beautiful UI #12, ~130 baris).
+    - `BatchCompletionModal.tsx` (Approval Card Beautiful UI #04, ~80 baris).
 
 ---
 
-## 4. Ringkasan Berkas Kunci Proyek
+## 4. Catatan Runtime & Lingkungan Pengujian
 
-* **Spesifikasi Wave 9:** [`.scratch/wave-9-apple-editorial-ui/spec.md`](file:///D:/PEREWANGAN%20369/Tani/.scratch/wave-9-apple-editorial-ui/spec.md)
-* **Direktori Tiket Wave 9:** [`.scratch/wave-9-apple-editorial-ui/issues/`](file:///D:/PEREWANGAN%20369/Tani/.scratch/wave-9-apple-editorial-ui/issues/)
-* **Spesifikasi Wave 8:** [`.scratch/wave-8-sync-and-batch/spec.md`](file:///D:/PEREWANGAN%20369/Tani/.scratch/wave-8-sync-and-batch/spec.md)
-* **Direktori Tiket Wave 8:** [`.scratch/wave-8-sync-and-batch/issues/`](file:///D:/PEREWANGAN%20369/Tani/.scratch/wave-8-sync-and-batch/issues/)
-* **Parser Geospasial (Tunggal & Batch):** [`backend/app/utils/kml_parser.py`](file:///D:/PEREWANGAN%20369/Tani/backend/app/utils/kml_parser.py)
-* **Layanan Auto-Centroid Estate:** [`backend/app/services/estate_service.py`](file:///D:/PEREWANGAN%20369/Tani/backend/app/services/estate_service.py)
-* **Layanan Satellite Backfill:** [`backend/app/services/satellite_backfill_service.py`](file:///D:/PEREWANGAN%20369/Tani/backend/app/services/satellite_backfill_service.py)
-* **Router Petak Backend:** [`backend/app/api/plots.py`](file:///D:/PEREWANGAN%20369/Tani/backend/app/api/plots.py)
-* **Antarmuka Pendaftaran & Batch Wizard Frontend:** [`frontend/src/app/admin/petak-baru/page.tsx`](file:///D:/PEREWANGAN%20369/Tani/frontend/src/app/admin/petak-baru/page.tsx)
-* **Definisi Tipe Data Frontend:** [`frontend/src/types/index.ts`](file:///D:/PEREWANGAN%20369/Tani/frontend/src/types/index.ts)
-* **Test Suite Backend:** `backend/tests/` (123 tests, 115 passed, 8 skipped, 0 failures)
-
+- **Python Host Executable:** `C:\Users\M S I\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\python.exe`.
+- **Perintah Uji Backend:**
+  ```powershell
+  & "C:\Users\M S I\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\python.exe" -m unittest discover -s tests -p "test_*.py"
+  ```
+  *(Jalankan dari direktori `backend/`, saat ini 123 tests lolos tanpa kegagalan).*
+- **Perintah Frontend (jika diperlukan):** Jalankan via `cmd.exe /c npm ...` atau `npm.cmd` di direktori `frontend/`.
+- **Git Branch:** `master`.
