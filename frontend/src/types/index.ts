@@ -676,4 +676,57 @@ export interface PlotImportPreviewResponse {
   warnings: string[];
 }
 
+// -------------------------------------------------------------
+// Batch Geospatial Import & Bulk Registration Types (Wave 8)
+// -------------------------------------------------------------
+
+export interface PlotBatchItemPreview {
+  name: string;
+  geometry: {
+    type: "Polygon";
+    coordinates: number[][][];
+  };
+  area_hectares: number;
+  area_m2: number;
+  vertex_count: number;
+  bounding_box: [number, number, number, number];
+  centroid: [number, number];
+  is_valid: boolean;
+  warnings: string[];
+}
+
+export interface PlotBatchImportPreviewResponse {
+  format: "KML" | "KMZ" | "GeoJSON" | string;
+  total_plots: number;
+  total_area_hectares: number;
+  total_area_m2: number;
+  unified_bounding_box: [number, number, number, number];
+  plots: PlotBatchItemPreview[];
+}
+
+export interface PlotBatchCreateItem {
+  name: string;
+  variety_id?: number | null;
+  crop_type: "padi" | "jagung";
+  planting_date?: string | null;
+  polygon: {
+    type: "Polygon";
+    coordinates: number[][][];
+  };
+}
+
+export interface PlotBatchCreateRequest {
+  division_id: number;
+  plots: PlotBatchCreateItem[];
+}
+
+export interface PlotBatchCreateResponse {
+  created_count: number;
+  failed_count: number;
+  total_area_hectares: number;
+  plot_ids: number[];
+  errors: string[];
+}
+
+
 

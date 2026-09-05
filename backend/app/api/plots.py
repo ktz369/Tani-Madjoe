@@ -23,10 +23,16 @@ from app.schemas.plot import (
     PlotGeoJSONResponse,
     PlotImportPreviewRequest,
     PlotImportPreviewResponse,
+    PlotBatchImportPreviewResponse,
+    PlotBatchItemPreview,
+    PlotBatchCreateItem,
+    PlotBatchCreateRequest,
+    PlotBatchCreateResponse,
     PlotResponse,
     PlotSummaryResponse,
     PlotUpdate,
 )
+
 from app.schemas.satellite import PlotSatelliteTileResponse
 from app.schemas.report import SeasonComparisonResponse
 from app.services.gdd_service import predict_harvest_date, sync_gdd_for_plot
@@ -35,11 +41,17 @@ from app.services.report_service import generate_season_comparison
 from app.services.satellite_indices import classify_vegetation_health, detect_sar_flooding
 from app.utils.geo import (
     calculate_polygon_area_hectares,
+    coordinates_from_point,
     geojson_from_polygon,
     point_from_coordinates,
     polygon_from_geojson,
 )
-from app.utils.kml_parser import SpatialParseError, parse_spatial_file
+from app.utils.kml_parser import (
+    SpatialParseError,
+    parse_multi_spatial_file,
+    parse_spatial_file,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -209,6 +221,12 @@ async def _handle_create_plot(
     try:
         if division and division.estate:
             try:
+                # Wave 8 / Ticket 01: Ensure estate has centroid GPS coordinates if missing
+                estate_lat, estate_lng = coordinates_from_point(division.estate.location_point)
+                if estate_lat is None or estate_lng is None or (estate_lat == 0.0 and estate_lng == 0.0):
+                    from app.services.estate_service import ensure_estate_centroid_from_polygon
+                    await ensure_estate_centroid_from_polygon(db, division.estate, payload.polygon)
+
                 from app.services.weather_service import sync_weather_for_estate
                 await sync_weather_for_estate(db, division.estate)
             except Exception as w_err:
@@ -219,6 +237,13 @@ async def _handle_create_plot(
                 await sync_gdd_for_plot(db, plot.id)
             except Exception as gdd_err:
                 logger.warning("Auto GDD sync for plot %s failed: %s", plot.id, gdd_err)
+
+        # 30-Day Historical Satellite Backfill (Wave 8 / Ticket 04)
+        try:
+            from app.services.satellite_backfill_service import backfill_satellite_indices_for_plot
+            await backfill_satellite_indices_for_plot(db, plot.id, days_back=30, cadence_days=5)
+        except Exception as backfill_err:
+            logger.warning("Historical satellite backfill for plot %s failed: %s", plot.id, backfill_err)
 
         # Baseline spectral index observation (Wave 7 / Ticket 06)
         try:
@@ -329,9 +354,268 @@ async def preview_spatial_import(
     )
 
 
+@router.post(
+    "/plots/batch-import-preview",
+    response_model=PlotBatchImportPreviewResponse,
+    summary="Preview dan validasi berkas geospasial massal / multi-placemark (KML, KMZ, GeoJSON)",
+)
+@router.post(
+    "/plots/batch-parse-kml",
+    response_model=PlotBatchImportPreviewResponse,
+    include_in_schema=False,
+)
+async def preview_batch_spatial_import(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+):
+    """Menerima berkas KML/KMZ multi-placemark atau GeoJSON FeatureCollection,
+    mengekstrak seluruh poligon petak, luas individual, dan unified bounding box."""
+    content_bytes: bytes = b""
+    filename: Optional[str] = None
+
+    content_type = request.headers.get("content-type", "")
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        uploaded_file = form.get("file")
+        if uploaded_file is not None and hasattr(uploaded_file, "read"):
+            content_bytes = await uploaded_file.read()
+            filename = getattr(uploaded_file, "filename", None)
+        elif "content" in form:
+            content_bytes = str(form.get("content")).encode("utf-8")
+            filename = str(form.get("filename", "upload.kml"))
+    elif "application/json" in content_type:
+        try:
+            body_json = await request.json()
+            if isinstance(body_json, dict) and "content" in body_json:
+                content_bytes = str(body_json["content"]).encode("utf-8")
+                filename = body_json.get("filename")
+            elif isinstance(body_json, dict):
+                import json
+                content_bytes = json.dumps(body_json).encode("utf-8")
+                filename = "data.geojson"
+            else:
+                content_bytes = str(body_json).encode("utf-8")
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Format JSON permintaan tidak valid: {str(e)}",
+            )
+    else:
+        content_bytes = await request.body()
+
+    if not content_bytes or not content_bytes.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Berkas atau konten geospasial kosong. Harap unggah berkas .kml, .kmz, atau .geojson yang valid.",
+        )
+
+    try:
+        parsed = parse_multi_spatial_file(content_bytes, filename=filename)
+    except SpatialParseError as spe:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Gagal memproses berkas geospasial massal: {str(spe)}",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Terjadi kesalahan saat membaca berkas geospasial massal: {str(exc)}",
+        )
+
+    return PlotBatchImportPreviewResponse(
+        format=parsed["format"],
+        total_plots=parsed["total_plots"],
+        total_area_hectares=parsed["total_area_hectares"],
+        total_area_m2=parsed["total_area_m2"],
+        unified_bounding_box=parsed["unified_bounding_box"],
+        plots=[
+            PlotBatchItemPreview(
+                name=p["name"],
+                geometry=p["geometry"],
+                area_hectares=p["area_hectares"],
+                area_m2=p["area_m2"],
+                vertex_count=p["vertex_count"],
+                bounding_box=p["bounding_box"],
+                centroid=p["centroid"],
+                is_valid=p.get("is_valid", True),
+                warnings=p.get("warnings", []),
+            )
+            for p in parsed.get("plots", [])
+        ],
+    )
+
+
+@router.post(
+    "/plots/batch-create",
+    response_model=PlotBatchCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Mendaftarkan beberapa petak lahan sekaligus secara transaksional (Batch Create)",
+)
+async def batch_create_plots(
+    payload: PlotBatchCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Menyimpan seluruh petak lahan terpilih dalam satu transaksi database PostGIS,
+    menginisiasi auto-centroid estate jika kosong, memicu sinkronisasi cuaca, GDD,
+    dan antrean backfill satelit historis 30 hari untuk setiap petak."""
+    if not payload.plots:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Daftar petak lahan tidak boleh kosong.",
+        )
+
+    # 1. Validate Division exists
+    division_stmt = (
+        select(Division)
+        .where(Division.id == payload.division_id)
+        .options(selectinload(Division.estate).selectinload(Estate.company))
+    )
+    div_res = await db.execute(division_stmt)
+    division = div_res.scalar_one_or_none()
+    if not division:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Divisi dengan ID {payload.division_id} tidak ditemukan.",
+        )
+
+    today = date.today()
+    created_plots: List[Plot] = []
+    errors: List[str] = []
+
+    # Cache varieties to minimize DB queries
+    variety_cache = {}
+
+    for idx, item in enumerate(payload.plots):
+        try:
+            # Validate geometry
+            wkt_elem = polygon_from_geojson(item.polygon)
+            area_ha = calculate_polygon_area_hectares(item.polygon)
+            if area_ha <= 0.0:
+                errors.append(f"Petak '{item.name}' (indeks {idx}): Luas poligon 0 hektar atau tidak valid.")
+                continue
+
+            # Variety lookup
+            variety = None
+            if item.variety_id:
+                if item.variety_id in variety_cache:
+                    variety = variety_cache[item.variety_id]
+                else:
+                    var_stmt = (
+                        select(CropVariety)
+                        .where(CropVariety.id == item.variety_id)
+                        .options(selectinload(CropVariety.phases))
+                    )
+                    var_res = await db.execute(var_stmt)
+                    variety = var_res.scalar_one_or_none()
+                    variety_cache[item.variety_id] = variety
+
+            # HST & Phase calculation
+            if item.planting_date:
+                hst = max(0, (today - item.planting_date).days)
+            else:
+                hst = 0
+
+            resolved_phase = None
+            if variety and variety.phases:
+                for p in variety.phases:
+                    if p.hst_start <= hst <= p.hst_end:
+                        resolved_phase = p.phase_name
+                        break
+
+            new_plot = Plot(
+                division_id=payload.division_id,
+                variety_id=item.variety_id,
+                name=item.name.strip(),
+                polygon=wkt_elem,
+                area_hectares=area_ha,
+                planting_date=item.planting_date,
+                crop_type=item.crop_type.strip().lower(),
+                current_phase=resolved_phase,
+                current_hst=hst,
+            )
+            db.add(new_plot)
+            created_plots.append(new_plot)
+        except Exception as p_err:
+            errors.append(f"Petak '{item.name}' (indeks {idx}): {str(p_err)}")
+
+    if not created_plots:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Seluruh petak gagal divalidasi: {'; '.join(errors)}",
+        )
+
+    # Commit transactional batch save
+    await db.commit()
+    for p in created_plots:
+        await db.refresh(p)
+
+    # 2. Auto-centroid propagation to estate if needed (Wave 8 / Ticket 01)
+    if division.estate and created_plots:
+        try:
+            estate_lat, estate_lng = coordinates_from_point(division.estate.location_point)
+            if estate_lat is None or estate_lng is None or (estate_lat == 0.0 and estate_lng == 0.0):
+                from app.services.estate_service import ensure_estate_centroid_from_polygon
+                await ensure_estate_centroid_from_polygon(db, division.estate, payload.plots[0].polygon)
+        except Exception as c_err:
+            logger.warning("Batch plot auto-centroid failed: %s", c_err)
+
+    # 3. Weather sync for estate
+    if division.estate:
+        try:
+            from app.services.weather_service import sync_weather_for_estate
+            await sync_weather_for_estate(db, division.estate)
+        except Exception as w_err:
+            logger.warning("Batch weather sync for estate %s failed: %s", division.estate_id, w_err)
+
+    # 4. Telemetry activation for each created plot: GDD, 30-Day Historical Backfill, and Baseline
+    for p in created_plots:
+        if p.planting_date and p.variety_id:
+            try:
+                await sync_gdd_for_plot(db, p.id)
+            except Exception as gdd_err:
+                logger.warning("Batch GDD sync for plot %s failed: %s", p.id, gdd_err)
+
+        # Historical satellite backfill (Wave 8 / Ticket 04)
+        try:
+            from app.services.satellite_backfill_service import backfill_satellite_indices_for_plot
+            await backfill_satellite_indices_for_plot(db, p.id, days_back=30, cadence_days=5)
+        except Exception as bf_err:
+            logger.warning("Batch satellite backfill for plot %s failed: %s", p.id, bf_err)
+
+        # Baseline spectral index observation
+        try:
+            baseline_spec = SpectralIndex(
+                plot_id=p.id,
+                observation_date=date.today(),
+                satellite="sentinel-2",
+                ndvi=0.68,
+                ndre=0.32,
+                ndwi=0.20,
+                savi=0.55,
+                bsi=0.08,
+                cloud_cover_pct=5.0,
+            )
+            db.add(baseline_spec)
+            await db.commit()
+        except Exception as spec_err:
+            logger.warning("Auto baseline spectral index failed for plot %s: %s", p.id, spec_err)
+
+    total_area_ha = round(sum(p.area_hectares for p in created_plots), 4)
+    return PlotBatchCreateResponse(
+        created_count=len(created_plots),
+        failed_count=len(errors),
+        total_area_hectares=total_area_ha,
+        plot_ids=[p.id for p in created_plots],
+        errors=errors,
+    )
+
+
 # --------------------------------------------------------------------------
 # Endpoints
 # --------------------------------------------------------------------------
+
+
 
 @router.post(
     "/divisions/{division_id}/plots",

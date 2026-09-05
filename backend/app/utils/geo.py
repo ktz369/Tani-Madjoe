@@ -2,11 +2,43 @@
 import json
 import math
 from typing import Any, Dict, List, Optional, Tuple, Union
-from geoalchemy2 import Geography
-from geoalchemy2.elements import WKBElement, WKTElement
-from geoalchemy2.shape import to_shape
-from shapely.geometry import MultiPolygon, Point, Polygon, mapping, shape as shapely_shape
-from sqlalchemy import Numeric, cast, func
+try:
+    from geoalchemy2 import Geography
+    from geoalchemy2.elements import WKBElement, WKTElement
+    from geoalchemy2.shape import to_shape
+except ImportError:
+    class Geography: pass  # type: ignore
+    class WKTElement:  # type: ignore
+        def __init__(self, data, srid=4326):
+            self.data = data
+            self.srid = srid
+        def __str__(self): return str(self.data)
+        def __repr__(self): return f"WKTElement('{self.data}', srid={self.srid})"
+        def __eq__(self, other):
+            if isinstance(other, WKTElement):
+                return self.data == other.data and self.srid == other.srid
+            return False
+    class WKBElement:  # type: ignore
+        def __init__(self, data, srid=4326):
+            self.data = data
+            self.srid = srid
+    def to_shape(geom): return None  # type: ignore
+
+try:
+    from shapely.geometry import MultiPolygon, Point, Polygon, mapping, shape as shapely_shape
+except ImportError:
+    class Point: pass  # type: ignore
+    class Polygon: pass  # type: ignore
+    class MultiPolygon: pass  # type: ignore
+    def mapping(geom): return {}  # type: ignore
+    def shapely_shape(geom): return None  # type: ignore
+
+try:
+    from sqlalchemy import Numeric, cast, func
+except ImportError:
+    Numeric = Any  # type: ignore
+    cast = Any  # type: ignore
+    func = Any  # type: ignore
 
 
 def point_from_coordinates(

@@ -213,3 +213,66 @@ class PlotImportPreviewResponse(BaseModel):
     warnings: List[str] = Field(default_factory=list, description="Peringatan non-fatal normalisasi topologi")
 
 
+class PlotBatchItemPreview(BaseModel):
+    """Schema untuk item petak individual dalam hasil preview impor massal."""
+
+    name: str = Field(..., description="Nama petak yang diekstrak dari Placemark/dokumen")
+    geometry: Dict[str, Any] = Field(
+        ...,
+        description="Geometri GeoJSON Polygon standar {'type': 'Polygon', 'coordinates': [[[lng, lat], ...]]}",
+    )
+    area_hectares: float = Field(..., description="Luas permukaan geodesik dalam satuan hektar (Ha)")
+    area_m2: float = Field(..., description="Luas permukaan geodesik dalam meter persegi (m²)")
+    vertex_count: int = Field(..., description="Jumlah titik verteks cincin batas terluar poligon")
+    bounding_box: List[float] = Field(..., description="Batas koordinat [min_lng, min_lat, max_lng, max_lat]")
+    centroid: List[float] = Field(..., description="Titik sentroid petak [lng, lat]")
+    is_valid: bool = Field(default=True, description="Status validitas topologi poligon")
+    warnings: List[str] = Field(default_factory=list, description="Peringatan non-fatal normalisasi topologi")
+
+
+class PlotBatchImportPreviewResponse(BaseModel):
+    """Schema respons preview hasil parsing impor berkas geospasial massal (multi-placemark)."""
+
+    format: str = Field(..., description="Format berkas sumber ('KML', 'KMZ', atau 'GeoJSON')")
+    total_plots: int = Field(..., description="Jumlah total petak lahan yang terdeteksi")
+    total_area_hectares: float = Field(..., description="Total akumulasi luas seluruh petak dalam hektar")
+    total_area_m2: float = Field(..., description="Total akumulasi luas seluruh petak dalam meter persegi")
+    unified_bounding_box: List[float] = Field(
+        ..., description="Batas koordinat gabungan (enclosing bounding box) seluruh petak [min_lng, min_lat, max_lng, max_lat]"
+    )
+    plots: List[PlotBatchItemPreview] = Field(
+        default_factory=list, description="Daftar seluruh petak lahan yang berhasil diekstrak dan divalidasi"
+    )
+
+
+class PlotBatchCreateItem(BaseModel):
+    """Schema untuk item petak individual dalam registrasi massal."""
+
+    name: str = Field(..., min_length=1, max_length=255, description="Nama petak")
+    variety_id: Optional[int] = Field(default=None, description="ID varietas tanaman")
+    crop_type: str = Field(default="padi", description="'padi' atau 'jagung'")
+    planting_date: Optional[date] = Field(default=None, description="Tanggal tanam (YYYY-MM-DD)")
+    polygon: Dict[str, Any] = Field(
+        ..., description="Geometri poligon GeoJSON: {'type': 'Polygon', 'coordinates': [[[lng, lat], ...]]}"
+    )
+
+
+class PlotBatchCreateRequest(BaseModel):
+    """Schema payload untuk registrasi petak lahan massal (batch create)."""
+
+    division_id: int = Field(..., description="ID Divisi target penempatan seluruh petak dalam batch")
+    plots: List[PlotBatchCreateItem] = Field(..., min_length=1, description="Daftar petak yang akan didaftarkan")
+
+
+class PlotBatchCreateResponse(BaseModel):
+    """Schema respons setelah registrasi petak massal berhasil dieksekusi."""
+
+    created_count: int = Field(..., description="Jumlah petak yang berhasil didaftarkan")
+    failed_count: int = Field(default=0, description="Jumlah petak yang gagal didaftarkan")
+    total_area_hectares: float = Field(..., description="Total luas akumulasi petak yang berhasil didaftarkan (Ha)")
+    plot_ids: List[int] = Field(default_factory=list, description="Daftar ID petak yang baru terbentuk")
+    errors: List[str] = Field(default_factory=list, description="Pesan error per petak jika ada kegagalan")
+
+
+
+

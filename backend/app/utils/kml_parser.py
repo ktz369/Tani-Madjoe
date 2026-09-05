@@ -1,4 +1,4 @@
-﻿"""KML, KMZ, and GeoJSON parser and spatial validator for Tani Precision Agriculture platform.
+"""KML, KMZ, and GeoJSON parser and spatial validator for Tani Precision Agriculture platform.
 
 Extracts Placemark geometries, coordinates, bounding box, centroid, and computes
 geodesic area in square meters and hectares without external C-library dependencies.
@@ -445,3 +445,386 @@ def parse_spatial_file(
         return parse_geojson_content(content_bytes, default_name=chosen_default)
 
     return parse_kml_content(content_bytes, default_name=chosen_default)
+
+
+def compute_unified_bounding_box(plots: List[Dict[str, Any]]) -> List[float]:
+    """Compute enclosing bounding box [min_lng, min_lat, max_lng, max_lat] covering all plots."""
+    if not plots:
+        return [0.0, 0.0, 0.0, 0.0]
+    min_lng = min(p["bounding_box"][0] for p in plots)
+    min_lat = min(p["bounding_box"][1] for p in plots)
+    max_lng = max(p["bounding_box"][2] for p in plots)
+    max_lat = max(p["bounding_box"][3] for p in plots)
+    return [
+        round(min_lng, 7),
+        round(min_lat, 7),
+        round(max_lng, 7),
+        round(max_lat, 7),
+    ]
+
+
+def _extract_plots_from_kml(
+    xml_content: Union[str, bytes],
+    default_name: str = "Petak",
+    start_idx: int = 1,
+) -> List[Dict[str, Any]]:
+    """Scan and extract all valid polygon plots from KML XML content."""
+    if isinstance(xml_content, str):
+        xml_bytes = xml_content.encode("utf-8")
+    else:
+        xml_bytes = xml_content
+
+    if not xml_bytes or not xml_bytes.strip():
+        raise SpatialParseError("Berkas KML kosong atau tidak memuat data.")
+
+    try:
+        root = ET.fromstring(xml_bytes)
+    except ET.ParseError as pe:
+        raise SpatialParseError(f"Format XML KML tidak valid atau rusak: {str(pe)}")
+
+    plots: List[Dict[str, Any]] = []
+
+    # Find all Placemarks
+    placemarks = [elem for elem in root.iter() if _strip_tag_namespace(elem.tag) == "Placemark"]
+
+    if placemarks:
+        for pm in placemarks:
+            pm_name: Optional[str] = None
+            for child in pm:
+                if _strip_tag_namespace(child.tag) == "name" and child.text and child.text.strip():
+                    pm_name = child.text.strip()
+                    break
+
+            # Find all Polygon elements inside this Placemark
+            polygon_elems = [e for e in pm.iter() if _strip_tag_namespace(e.tag) == "Polygon"]
+            if not polygon_elems:
+                # Check for direct outerBoundaryIs under placemark
+                if any(_strip_tag_namespace(e.tag) == "outerBoundaryIs" for e in pm.iter()):
+                    polygon_elems = [pm]
+
+            if not polygon_elems:
+                # E.g. Point or LineString without Polygon
+                continue
+
+            for p_idx, poly in enumerate(polygon_elems):
+                exterior_coords: Optional[List[List[float]]] = None
+                interior_rings: List[List[List[float]]] = []
+
+                for sub in poly.iter():
+                    sub_tag = _strip_tag_namespace(sub.tag)
+                    if sub_tag == "outerBoundaryIs":
+                        for coord_elem in sub.iter():
+                            if _strip_tag_namespace(coord_elem.tag) == "coordinates" and coord_elem.text:
+                                try:
+                                    exterior_coords = _parse_coordinates_text(coord_elem.text)
+                                except SpatialParseError:
+                                    pass
+                                break
+                    elif sub_tag == "innerBoundaryIs":
+                        for coord_elem in sub.iter():
+                            if _strip_tag_namespace(coord_elem.tag) == "coordinates" and coord_elem.text:
+                                try:
+                                    interior_rings.append(_parse_coordinates_text(coord_elem.text))
+                                except SpatialParseError:
+                                    pass
+                                break
+
+                if not exterior_coords:
+                    for sub in poly.iter():
+                        if _strip_tag_namespace(sub.tag) == "coordinates" and sub.text:
+                            try:
+                                exterior_coords = _parse_coordinates_text(sub.text)
+                            except SpatialParseError:
+                                pass
+                            break
+
+                if not exterior_coords:
+                    continue
+
+                all_rings = [exterior_coords, *interior_rings]
+                validation = validate_and_normalize_polygon(all_rings)
+                if not validation["is_valid"]:
+                    continue
+
+                if pm_name:
+                    plot_name = f"{pm_name} {p_idx + 1}" if len(polygon_elems) > 1 else pm_name
+                else:
+                    plot_name = f"{default_name} {start_idx + len(plots)}"
+
+                plots.append({
+                    "name": plot_name,
+                    "geometry": validation["geometry"],
+                    "area_hectares": validation["area_hectares"],
+                    "area_m2": validation["area_m2"],
+                    "vertex_count": validation["vertex_count"],
+                    "bounding_box": validation["bounding_box"],
+                    "centroid": validation["centroid"],
+                    "is_valid": True,
+                    "warnings": validation.get("warnings", []),
+                })
+    else:
+        # Fallback: check for standalone Polygon elements not wrapped in Placemark
+        polygon_elems = [e for e in root.iter() if _strip_tag_namespace(e.tag) == "Polygon"]
+        for poly in polygon_elems:
+            exterior_coords = None
+            interior_rings = []
+            for sub in poly.iter():
+                sub_tag = _strip_tag_namespace(sub.tag)
+                if sub_tag == "outerBoundaryIs":
+                    for coord_elem in sub.iter():
+                        if _strip_tag_namespace(coord_elem.tag) == "coordinates" and coord_elem.text:
+                            try:
+                                exterior_coords = _parse_coordinates_text(coord_elem.text)
+                            except SpatialParseError:
+                                pass
+                            break
+                elif sub_tag == "innerBoundaryIs":
+                    for coord_elem in sub.iter():
+                        if _strip_tag_namespace(coord_elem.tag) == "coordinates" and coord_elem.text:
+                            try:
+                                interior_rings.append(_parse_coordinates_text(coord_elem.text))
+                            except SpatialParseError:
+                                pass
+                            break
+
+            if not exterior_coords:
+                for sub in poly.iter():
+                    if _strip_tag_namespace(sub.tag) == "coordinates" and sub.text:
+                        try:
+                            exterior_coords = _parse_coordinates_text(sub.text)
+                        except SpatialParseError:
+                            pass
+                        break
+
+            if not exterior_coords:
+                continue
+
+            all_rings = [exterior_coords, *interior_rings]
+            validation = validate_and_normalize_polygon(all_rings)
+            if not validation["is_valid"]:
+                continue
+
+            plot_name = f"{default_name} {start_idx + len(plots)}"
+            plots.append({
+                "name": plot_name,
+                "geometry": validation["geometry"],
+                "area_hectares": validation["area_hectares"],
+                "area_m2": validation["area_m2"],
+                "vertex_count": validation["vertex_count"],
+                "bounding_box": validation["bounding_box"],
+                "centroid": validation["centroid"],
+                "is_valid": True,
+                "warnings": validation.get("warnings", []),
+            })
+
+    return plots
+
+
+def parse_multi_kml_content(
+    xml_content: Union[str, bytes],
+    default_name: str = "Petak",
+) -> Dict[str, Any]:
+    """Parse multi-placemark KML XML content into unified collection of plots."""
+    plots = _extract_plots_from_kml(xml_content, default_name=default_name)
+    if not plots:
+        raise SpatialParseError("Berkas tidak memuat poligon petak lahan yang valid.")
+
+    total_m2 = round(sum(p["area_m2"] for p in plots), 2)
+    total_ha = round(sum(p["area_hectares"] for p in plots), 4)
+    unified_bbox = compute_unified_bounding_box(plots)
+
+    return {
+        "format": "KML",
+        "total_plots": len(plots),
+        "total_area_hectares": total_ha,
+        "total_area_m2": total_m2,
+        "unified_bounding_box": unified_bbox,
+        "plots": plots,
+    }
+
+
+def parse_multi_geojson_content(
+    raw_content: Union[str, bytes, dict],
+    default_name: str = "Petak",
+) -> Dict[str, Any]:
+    """Parse multi-feature GeoJSON FeatureCollection or geometry collection into unified plots."""
+    if isinstance(raw_content, bytes):
+        raw_str = raw_content.decode("utf-8", errors="replace")
+    elif isinstance(raw_content, str):
+        raw_str = raw_content
+    elif isinstance(raw_content, (dict, list)):
+        data = raw_content
+        raw_str = None
+    else:
+        raise SpatialParseError("Tipe konten GeoJSON tidak didukung.")
+
+    if raw_str is not None:
+        if not raw_str.strip():
+            raise SpatialParseError("Berkas GeoJSON kosong atau tidak memuat data.")
+        try:
+            data = json.loads(raw_str)
+        except json.JSONDecodeError as jde:
+            raise SpatialParseError(f"Format berkas GeoJSON tidak valid: {str(jde)}")
+
+    plots: List[Dict[str, Any]] = []
+    features: List[Dict[str, Any]] = []
+
+    if isinstance(data, dict):
+        data_type = data.get("type")
+        if data_type == "FeatureCollection":
+            features = data.get("features") or []
+        elif data_type == "Feature":
+            features = [data]
+        elif data_type in ("Polygon", "MultiPolygon"):
+            features = [{"type": "Feature", "properties": {"name": data.get("name")}, "geometry": data}]
+    elif isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                if item.get("type") == "Feature":
+                    features.append(item)
+                elif item.get("type") in ("Polygon", "MultiPolygon"):
+                    features.append({"type": "Feature", "properties": {"name": item.get("name")}, "geometry": item})
+                elif isinstance(item, list):
+                    features.append({"type": "Feature", "properties": {}, "geometry": {"type": "Polygon", "coordinates": item}})
+
+    for feat in features:
+        if not isinstance(feat, dict):
+            continue
+        props = feat.get("properties") or {}
+        feat_name = props.get("name") or props.get("title")
+        if feat_name and not str(feat_name).strip():
+            feat_name = None
+
+        geom = feat.get("geometry") or {}
+        if not isinstance(geom, dict):
+            continue
+        g_type = geom.get("type")
+        coords = geom.get("coordinates") or []
+
+        if g_type == "Polygon":
+            validation = validate_and_normalize_polygon(coords)
+            if validation["is_valid"]:
+                plot_name = str(feat_name).strip() if feat_name else f"{default_name} {len(plots) + 1}"
+                plots.append({
+                    "name": plot_name,
+                    "geometry": validation["geometry"],
+                    "area_hectares": validation["area_hectares"],
+                    "area_m2": validation["area_m2"],
+                    "vertex_count": validation["vertex_count"],
+                    "bounding_box": validation["bounding_box"],
+                    "centroid": validation["centroid"],
+                    "is_valid": True,
+                    "warnings": validation.get("warnings", []),
+                })
+        elif g_type == "MultiPolygon":
+            for p_idx, poly_coords in enumerate(coords):
+                validation = validate_and_normalize_polygon(poly_coords)
+                if validation["is_valid"]:
+                    if feat_name:
+                        plot_name = f"{str(feat_name).strip()} {p_idx + 1}" if len(coords) > 1 else str(feat_name).strip()
+                    else:
+                        plot_name = f"{default_name} {len(plots) + 1}"
+                    plots.append({
+                        "name": plot_name,
+                        "geometry": validation["geometry"],
+                        "area_hectares": validation["area_hectares"],
+                        "area_m2": validation["area_m2"],
+                        "vertex_count": validation["vertex_count"],
+                        "bounding_box": validation["bounding_box"],
+                        "centroid": validation["centroid"],
+                        "is_valid": True,
+                        "warnings": validation.get("warnings", []),
+                    })
+
+    if not plots:
+        raise SpatialParseError("Berkas tidak memuat poligon petak lahan yang valid.")
+
+    total_m2 = round(sum(p["area_m2"] for p in plots), 2)
+    total_ha = round(sum(p["area_hectares"] for p in plots), 4)
+    unified_bbox = compute_unified_bounding_box(plots)
+
+    return {
+        "format": "GeoJSON",
+        "total_plots": len(plots),
+        "total_area_hectares": total_ha,
+        "total_area_m2": total_m2,
+        "unified_bounding_box": unified_bbox,
+        "plots": plots,
+    }
+
+
+def parse_multi_kmz_content(
+    kmz_bytes: bytes,
+    default_name: str = "Petak",
+) -> Dict[str, Any]:
+    """Extract and parse all KML documents and placemarks from a KMZ archive."""
+    if not isinstance(kmz_bytes, bytes):
+        raise SpatialParseError("Data KMZ harus berupa bytes biner.")
+
+    if not zipfile.is_zipfile(io.BytesIO(kmz_bytes)):
+        raise SpatialParseError("Berkas KMZ tidak berformat arsip ZIP yang valid.")
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(kmz_bytes), "r") as zf:
+            namelist = zf.namelist()
+            kml_files = [n for n in namelist if n.lower().endswith(".kml")]
+            if not kml_files:
+                raise SpatialParseError("Arsip KMZ tidak memuat berkas .kml di dalamnya.")
+
+            # Sort doc.kml first, then others
+            kml_files.sort(key=lambda x: (0 if x.lower().endswith("doc.kml") else 1, x))
+
+            all_plots: List[Dict[str, Any]] = []
+            for kml_file in kml_files:
+                try:
+                    kml_data = zf.read(kml_file)
+                    plots = _extract_plots_from_kml(kml_data, default_name=default_name, start_idx=len(all_plots) + 1)
+                    all_plots.extend(plots)
+                except SpatialParseError:
+                    continue
+
+            if not all_plots:
+                raise SpatialParseError("Berkas tidak memuat poligon petak lahan yang valid.")
+
+            total_m2 = round(sum(p["area_m2"] for p in all_plots), 2)
+            total_ha = round(sum(p["area_hectares"] for p in all_plots), 4)
+            unified_bbox = compute_unified_bounding_box(all_plots)
+
+            return {
+                "format": "KMZ",
+                "total_plots": len(all_plots),
+                "total_area_hectares": total_ha,
+                "total_area_m2": total_m2,
+                "unified_bounding_box": unified_bbox,
+                "plots": all_plots,
+            }
+    except zipfile.BadZipFile as bzf:
+        raise SpatialParseError(f"Arsip KMZ rusak: {str(bzf)}")
+
+
+def parse_multi_spatial_file(
+    content: Union[str, bytes],
+    filename: Optional[str] = None,
+    default_name: str = "Petak",
+) -> Dict[str, Any]:
+    """Auto-detect format (KMZ, KML, or GeoJSON) and return parsed multi-plot collection."""
+    if isinstance(content, str):
+        content_bytes = content.encode("utf-8")
+    else:
+        content_bytes = content
+
+    if not content_bytes or not content_bytes.strip():
+        raise SpatialParseError("Berkas spatial kosong atau tidak memuat data.")
+
+    # Detect KMZ via ZIP magic header (PK\x03\x04) or filename
+    if content_bytes.startswith(b"PK\x03\x04") or (filename and filename.lower().endswith(".kmz")):
+        return parse_multi_kmz_content(content_bytes, default_name=default_name)
+
+    # Detect GeoJSON via leading '{' or '[' or extension
+    stripped = content_bytes.strip()
+    if stripped.startswith(b"{") or stripped.startswith(b"[") or (filename and filename.lower().endswith((".geojson", ".json"))):
+        return parse_multi_geojson_content(content_bytes, default_name=default_name)
+
+    # Default to KML
+    return parse_multi_kml_content(content_bytes, default_name=default_name)
+
