@@ -1,0 +1,46 @@
+[Unit]
+Description=TANDUR FastAPI Agronomy & Spatial Backend Service
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/var/www/tandur/backend
+
+# Environment configuration
+EnvironmentFile=/var/www/tandur/backend/.env
+Environment="PATH=/var/www/tandur/backend/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONPATH=/var/www/tandur/backend"
+
+# Command to execute
+# Catatan: Gunakan --workers 1 agar background scheduler (APScheduler: sinkronisasi cuaca harian, satelit GEE, GDD, dan email notifikasi)
+# tidak berjalan duplikat di beberapa proses worker sekaligus. FastAPI asinkron (asyncpg/asyncio) mampu menangani trafik tinggi dengan 1 worker.
+ExecStart=/var/www/tandur/backend/.venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 1 \
+    --proxy-headers \
+    --forwarded-allow-ips="127.0.0.1" \
+    --log-level info \
+    --access-log
+
+# Restart policies
+Restart=always
+RestartSec=5s
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Security sandboxing
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/var/www/tandur/backend
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

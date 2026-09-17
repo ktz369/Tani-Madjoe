@@ -105,7 +105,7 @@ def calc_savi(nir: Optional[float], red: Optional[float], L: float = 0.5) -> Opt
         return 0.0
 
     val = ((nir - red) / denom) * (1.0 + L)
-    val = max(-1.5, min(1.5, val))
+    val = max(-1.0, min(1.0, val))
     return round(val, 4)
 
 
@@ -139,6 +139,29 @@ def calc_bsi(
 
     val = numerator / denom
     val = max(-1.0, min(1.0, val))
+    return round(val, 4)
+
+
+def calc_sar_ratio(vh: Optional[float], vv: Optional[float]) -> Optional[float]:
+    """Calculate Synthetic Aperture Radar (SAR) Polarization Ratio (VH / VV).
+
+    Ratio of cross-polarization to co-polarization backscatter.
+    Serves as an indicator of vegetation canopy structure, roughness, and biomass.
+
+    Parameters:
+        vh: Cross-polarization backscatter intensity (linear scale)
+        vv: Co-polarization backscatter intensity (linear scale)
+
+    Returns:
+        float rounded to 4 decimals, or None if inputs are invalid, or 0.0 if denominator is zero.
+    """
+    if vh is None or vv is None:
+        return None
+
+    if abs(vv) < 1e-7:
+        return 0.0
+
+    val = vh / vv
     return round(val, 4)
 
 

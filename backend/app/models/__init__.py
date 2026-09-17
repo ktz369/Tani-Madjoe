@@ -13,6 +13,18 @@ from app.models.planting_season import PlantingSeason
 from app.models.gdd_accumulation import GddAccumulation
 from app.models.alert import Alert
 from app.models.generated_report import GeneratedReport
+from app.models.operations import (
+    TaskType,
+    SaprotanCategory,
+    PestSeverity,
+    WaterSource,
+    PlotLaborLog,
+    PlotIrrigationLog,
+    SaprotanItem,
+    PlotSaprotanApplication,
+    PestScoutingReport,
+    PostHarvestLog,
+)
 
 __all__ = [
     "Base",
@@ -29,5 +41,16 @@ __all__ = [
     "GddAccumulation",
     "Alert",
     "GeneratedReport",
+    "TaskType",
+    "SaprotanCategory",
+    "PestSeverity",
+    "WaterSource",
+    "PlotLaborLog",
+    "PlotIrrigationLog",
+    "SaprotanItem",
+    "PlotSaprotanApplication",
+    "PestScoutingReport",
+    "PostHarvestLog",
 ]
+
 

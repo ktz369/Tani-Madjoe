@@ -30,7 +30,10 @@ def atmospheric_pressure(elevation_m: float = 0.0) -> float:
     """
     if elevation_m < 0.0:
         elevation_m = 0.0
-    return 101.3 * math.pow((293.0 - 0.0065 * elevation_m) / 293.0, 5.26)
+    term = (293.0 - 0.0065 * elevation_m) / 293.0
+    if term <= 0.0:
+        return 0.0
+    return 101.3 * math.pow(term, 5.26)
 
 
 def psychrometric_constant(pressure_kpa: float) -> float:
@@ -46,7 +49,18 @@ def saturation_vapor_pressure(temp_c: float) -> float:
 
     FAO-56 Eq. 11: e°(T) = 0.6108 * exp((17.27 * T) / (T + 237.3))
     """
-    return 0.6108 * math.exp((17.27 * temp_c) / (temp_c + 237.3))
+    denom = temp_c + 237.3
+    if abs(denom) < 1e-6:
+        return 0.0
+    try:
+        exponent = (17.27 * temp_c) / denom
+        if exponent > 700.0:
+            return 1e6
+        if exponent < -700.0:
+            return 0.0
+        return 0.6108 * math.exp(exponent)
+    except (OverflowError, ValueError):
+        return 0.0
 
 
 def mean_saturation_vapor_pressure(temp_max_c: float, temp_min_c: float) -> float:
@@ -62,8 +76,11 @@ def slope_vapor_pressure_curve(temp_c: float) -> float:
 
     FAO-56 Eq. 13: delta = (4098 * (0.6108 * exp((17.27 * T) / (T + 237.3)))) / ((T + 237.3) ** 2)
     """
+    denom = math.pow(temp_c + 237.3, 2)
+    if denom <= 0.0:
+        return 0.0
     e_t = saturation_vapor_pressure(temp_c)
-    return (4098.0 * e_t) / math.pow(temp_c + 237.3, 2)
+    return (4098.0 * e_t) / denom
 
 
 def actual_vapor_pressure(
@@ -120,7 +137,9 @@ def extraterrestrial_radiation(latitude_deg: float, day_of_year: int) -> float:
     ws = arccos(-tan(phi) * tan(delta))
     Ra = (24 * 60 / pi) * G_sc * dr * (ws*sin(phi)*sin(delta) + cos(phi)*cos(delta)*sin(ws))
     """
-    phi = math.radians(latitude_deg)
+    # Clamp latitude to avoid tan(90 deg) singularity
+    clamped_lat = max(-89.9, min(89.9, latitude_deg))
+    phi = math.radians(clamped_lat)
     dr = 1.0 + 0.033 * math.cos(2.0 * math.pi * day_of_year / 365.0)
     solar_dec = 0.409 * math.sin((2.0 * math.pi * day_of_year / 365.0) - 1.39)
 
@@ -142,7 +161,7 @@ def clear_sky_solar_radiation(ra_mjm2: float, elevation_m: float = 0.0) -> float
 
     FAO-56 Eq. 37: Rso = (0.75 + 2e-5 * z) * Ra
     """
-    return (0.75 + 2e-5 * max(0.0, elevation_m)) * ra_mjm2
+    return (0.75 + 2e-5 * max(0.0, elevation_m)) * max(0.0, ra_mjm2)
 
 
 def net_solar_radiation(rs_mjm2: float, albedo: float = ALBEDO) -> float:
@@ -223,14 +242,24 @@ def penman_monteith_fao56(
     vpd = max(0.0, es_kpa - ea_kpa)
     rn_minus_g = net_radiation_mjm2 - soil_heat_flux_mjm2
 
+    temp_k = t_mean_c + 273.0
+    if temp_k <= 0.0:
+        temp_k = 273.0
+
     radiation_term = 0.408 * delta_kpa_c * rn_minus_g
-    aerodynamic_term = gamma_kpa_c * (900.0 / (t_mean_c + 273.0)) * u2 * vpd
+    aerodynamic_term = gamma_kpa_c * (900.0 / temp_k) * u2 * vpd
     denominator = delta_kpa_c + gamma_kpa_c * (1.0 + 0.34 * u2)
 
-    if denominator <= 0:
+    if (
+        denominator <= 0.0
+        or math.isnan(denominator)
+        or math.isinf(denominator)
+    ):
         return 0.0
 
     et0 = (radiation_term + aerodynamic_term) / denominator
+    if math.isnan(et0) or math.isinf(et0):
+        return 0.0
     return max(0.0, et0)
 
 
@@ -280,6 +309,13 @@ def calculate_daily_et0(
                 return round(float(fallback_et0), 2)
             return None
 
+        # Guard against NaN or Inf values in inputs
+        for val in (temp_max_c, temp_min_c, humidity_pct, wind_speed_ms, solar_radiation_mjm2, net_radiation_mjm2):
+            if val is not None and (math.isnan(val) or math.isinf(val)):
+                if fallback_et0 is not None and not (math.isnan(fallback_et0) or math.isinf(fallback_et0)):
+                    return round(float(fallback_et0), 2)
+                return None
+
         # Resolve day of year
         doy = day_of_year
         if doy is None and observation_date is not None:
@@ -325,6 +361,11 @@ def calculate_daily_et0(
             gamma_kpa_c=gamma,
             soil_heat_flux_mjm2=0.0,
         )
+
+        if math.isnan(et0) or math.isinf(et0):
+            if fallback_et0 is not None and not (math.isnan(fallback_et0) or math.isinf(fallback_et0)):
+                return round(float(fallback_et0), 2)
+            return None
 
         return round(et0, 2)
 

@@ -98,11 +98,14 @@ export default function AlertPanel({
 
   // Handle single alert updated
   const handleAlertUpdate = (updated: AlertItem) => {
+    const prevAlert = alerts.find((a) => a.id === updated.id);
+    const wasUnread = prevAlert ? !prevAlert.is_read : true;
+
     setAlerts((prev) =>
       prev.map((item) => (item.id === updated.id ? updated : item))
     );
-    // Update counts
-    if (updated.is_read) {
+    // Update unread count
+    if (wasUnread && (updated.is_read || updated.is_resolved)) {
       setUnreadCount((c) => Math.max(0, c - 1));
     }
     if (onAlertUpdated) {
@@ -110,8 +113,22 @@ export default function AlertPanel({
     }
   };
 
-  // Filter client-side search query
+  // Filter client-side search query and severity
   const filteredAlerts = alerts.filter((alert) => {
+    // Severity chip filter
+    if (selectedSeverity !== "all") {
+      const s = (alert.severity || "").toLowerCase();
+      if (selectedSeverity === "CRITICAL") {
+        if (!["merah", "critical", "kritis", "berat"].includes(s)) return false;
+      } else if (selectedSeverity === "WARNING") {
+        if (!["oranye", "kuning", "warning", "waspada", "sedang"].includes(s)) return false;
+      } else if (selectedSeverity === "INFO") {
+        if (!["hijau_tua", "info", "informasi", "biru", "ringan", "panen"].includes(s)) return false;
+      } else if (s !== selectedSeverity.toLowerCase()) {
+        return false;
+      }
+    }
+
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -137,152 +154,143 @@ export default function AlertPanel({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden">
+    <div className="fixed inset-0 z-50 overflow-hidden font-sans">
       {/* Semi-transparent Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity duration-300 animate-in fade-in"
+        className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-300 animate-in fade-in"
         onClick={onClose}
         aria-label="Tutup panel alert"
       />
 
       <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
         <aside
-          className="w-screen max-w-md sm:max-w-lg md:max-w-xl bg-white shadow-2xl border-l border-slate-200 flex flex-col transform transition-all duration-300 animate-in slide-in-from-right"
+          className="w-screen max-w-md sm:max-w-lg md:max-w-xl bg-[var(--canvas)] border-l border-black/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.14)] flex flex-col transform transition-all duration-300 animate-in slide-in-from-right"
           role="dialog"
           aria-modal="true"
           aria-label="Panel Peringatan Lahan"
         >
           {/* Header Panel */}
-          <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/80 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-amber-500 text-white shadow-sm">
-                <Bell className="w-5 h-5" />
+          <div className="px-[21px] py-[13px] border-b border-black/[0.08] bg-white flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-[3px] bg-amber-100 text-amber-800 shrink-0">
+                <Bell className="w-4 h-4" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                  <h2 className="text-[13.5px] font-semibold text-[var(--ink)] tracking-tight">
                     Peringatan & Anomali Lahan
                   </h2>
                   {unreadCount > 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white shadow-xs">
+                    <span className="px-1.5 py-0.5 rounded-[3px] text-[10px] font-mono tabular-nums font-bold bg-rose-50 text-rose-700 border border-rose-200">
                       {unreadCount} baru
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-slate-500">
-                  Monitoring risiko agronomi dan anomali spektral lahan
+                <p className="label-telemetry mt-0.5">
+                  Monitoring risiko agronomi & anomali spektral
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               <button
                 onClick={loadAlerts}
                 disabled={loading}
-                className="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition-colors disabled:opacity-50"
+                className="p-1.5 rounded-[3px] text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--hover)] transition-colors disabled:opacity-50"
                 title="Segarkan data peringatan"
               >
-                <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
               </button>
               <button
                 onClick={onClose}
-                className="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition-colors"
+                className="p-1.5 rounded-[3px] text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--hover)] transition-colors"
                 title="Tutup panel (Esc)"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
           </div>
 
           {/* Filter & Search Bar */}
-          <div className="px-6 py-3 border-b border-slate-200 bg-white space-y-3">
+          <div className="px-[21px] py-[13px] border-b border-black/[0.08] bg-white space-y-2.5 shrink-0">
             {/* Search Input */}
             <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-3.5 h-3.5 text-[var(--ink-3)] absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari nama petak, anomali, rekomendasi..."
-                className="w-full pl-9 pr-3.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                placeholder="Cari petak, anomali, rekomendasi..."
+                className="w-full pl-8 pr-3 h-[34px] rounded-[3px] border border-black/[0.08] bg-[var(--field)] text-[12.5px] text-[var(--ink)] placeholder:text-[var(--ink-3)] focus:outline-none focus:border-[var(--accent)]"
               />
             </div>
 
             {/* Severity Pill Filters */}
             <div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-1.5 font-medium">
-                <Filter className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-1.5 label-telemetry mb-1">
+                <Filter className="w-3 h-3" />
                 <span>Tingkat Keparahan (Severity):</span>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <button
                   onClick={() => setSelectedSeverity("all")}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                  className={`px-2.5 py-1 rounded-[3px] text-[11.5px] font-mono transition-colors border ${
                     selectedSeverity === "all"
-                      ? "bg-slate-900 text-white shadow-xs"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      ? "bg-[var(--ink)] text-white border-[var(--ink)] font-semibold"
+                      : "bg-white text-[var(--ink-2)] border-black/[0.08] hover:bg-black/[0.03]"
                   }`}
                 >
                   Semua
                 </button>
                 <button
-                  onClick={() => setSelectedSeverity("merah")}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition-all ${
-                    selectedSeverity === "merah"
-                      ? "bg-rose-600 text-white shadow-xs"
-                      : "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200"
+                  onClick={() => setSelectedSeverity("CRITICAL")}
+                  className={`px-2.5 py-1 rounded-[3px] text-[11.5px] font-mono inline-flex items-center gap-1 border transition-colors ${
+                    selectedSeverity === "CRITICAL"
+                      ? "bg-rose-600 text-white border-rose-600 font-semibold"
+                      : "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
                   }`}
+                  title="Tingkat Kritis (Hama, Sundep, Rebah)"
                 >
                   <AlertOctagon className="w-3 h-3" />
-                  <span>🔴 Kritis/Hama</span>
+                  <span>CRITICAL</span>
                 </button>
                 <button
-                  onClick={() => setSelectedSeverity("oranye")}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition-all ${
-                    selectedSeverity === "oranye"
-                      ? "bg-orange-600 text-white shadow-xs"
-                      : "bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200"
+                  onClick={() => setSelectedSeverity("WARNING")}
+                  className={`px-2.5 py-1 rounded-[3px] text-[11.5px] font-mono inline-flex items-center gap-1 border transition-colors ${
+                    selectedSeverity === "WARNING"
+                      ? "bg-amber-600 text-white border-amber-600 font-semibold"
+                      : "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
                   }`}
-                >
-                  <Droplets className="w-3 h-3" />
-                  <span>🟠 Cekaman Air</span>
-                </button>
-                <button
-                  onClick={() => setSelectedSeverity("kuning")}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition-all ${
-                    selectedSeverity === "kuning"
-                      ? "bg-amber-500 text-white shadow-xs"
-                      : "bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200"
-                  }`}
+                  title="Tingkat Waspada (Cekaman Air, Defisiensi N)"
                 >
                   <AlertTriangle className="w-3 h-3" />
-                  <span>🟡 Defisiensi N</span>
+                  <span>WARNING</span>
                 </button>
                 <button
-                  onClick={() => setSelectedSeverity("hijau_tua")}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition-all ${
-                    selectedSeverity === "hijau_tua"
-                      ? "bg-emerald-700 text-white shadow-xs"
-                      : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200"
+                  onClick={() => setSelectedSeverity("INFO")}
+                  className={`px-2.5 py-1 rounded-[3px] text-[11.5px] font-mono inline-flex items-center gap-1 border transition-colors ${
+                    selectedSeverity === "INFO"
+                      ? "bg-emerald-700 text-white border-emerald-700 font-semibold"
+                      : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
                   }`}
+                  title="Informasi Agronomi & Kesiapan Panen"
                 >
                   <Sparkles className="w-3 h-3" />
-                  <span>🟢 Siap Panen</span>
+                  <span>INFO</span>
                 </button>
               </div>
             </div>
 
             {/* Status & Estate Dropdowns */}
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              {/* Status Filter */}
+            <div className="grid grid-cols-2 gap-2 pt-0.5">
               <div>
-                <label className="block text-[11px] font-medium text-slate-500 mb-1">
+                <label className="block label-telemetry mb-1">
                   Status Penanganan:
                 </label>
                 <select
                   value={selectedStatus}
                   onChange={(e) => setSelectedStatus(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-700 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                  className="w-full h-[34px] px-2 rounded-[3px] border border-black/[0.08] text-[12px] text-[var(--ink)] bg-white focus:outline-none focus:border-[var(--accent)]"
                 >
                   <option value="all">Semua Status</option>
                   <option value="unread">Belum Dibaca</option>
@@ -291,15 +299,14 @@ export default function AlertPanel({
                 </select>
               </div>
 
-              {/* Estate Filter */}
               <div>
-                <label className="block text-[11px] font-medium text-slate-500 mb-1">
+                <label className="block label-telemetry mb-1">
                   Lokasi Kebun (Estate):
                 </label>
                 <select
                   value={selectedEstateId}
                   onChange={(e) => setSelectedEstateId(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-700 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                  className="w-full h-[34px] px-2 rounded-[3px] border border-black/[0.08] text-[12px] text-[var(--ink)] bg-white focus:outline-none focus:border-[var(--accent)]"
                 >
                   <option value="all">Semua Kebun</option>
                   {estates.map((estate) => (
@@ -313,23 +320,22 @@ export default function AlertPanel({
           </div>
 
           {/* Alert Cards List */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3.5 bg-slate-50">
+          <div className="flex-1 overflow-y-auto p-[21px] space-y-3 bg-[var(--canvas)]">
             {loading && alerts.length === 0 ? (
-              <div className="py-20 flex flex-col items-center justify-center text-slate-400">
-                <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mb-3" />
-                <p className="text-xs font-medium text-slate-500">Memeriksa peringatan aktif...</p>
+              <div className="py-20 flex flex-col items-center justify-center text-[var(--ink-3)]">
+                <div className="w-6 h-6 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin mb-2" />
+                <p className="text-[12px]">Memeriksa peringatan aktif...</p>
               </div>
             ) : filteredAlerts.length === 0 ? (
-              <div className="py-16 text-center px-4 bg-white rounded-xl border border-slate-200/80 shadow-xs">
-                <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-3">
-                  <CheckCheck className="w-6 h-6" />
+              <div className="py-16 text-center px-4 bg-white rounded-[3px] border border-black/[0.08]">
+                <div className="w-10 h-10 rounded-[3px] bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-2.5">
+                  <CheckCheck className="w-5 h-5" />
                 </div>
-                <h3 className="text-sm font-bold text-slate-900 mb-1">
+                <h3 className="text-[13.5px] font-semibold text-[var(--ink)] mb-1">
                   Tidak Ada Peringatan Aktif
                 </h3>
-                <p className="text-xs text-slate-500 max-w-xs mx-auto leading-relaxed">
-                  Semua petak lahan dalam kondisi aman sesuai filter yang dipilih. Tidak ada anomali
-                  kritis yang membutuhkan tindakan segera.
+                <p className="text-[12px] text-[var(--ink-3)] max-w-xs mx-auto leading-relaxed">
+                  Semua petak lahan dalam kondisi aman sesuai filter yang dipilih. Tidak ada anomali kritis yang membutuhkan tindakan segera.
                 </p>
                 {(selectedSeverity !== "all" ||
                   selectedStatus !== "all" ||
@@ -342,7 +348,7 @@ export default function AlertPanel({
                       setSelectedEstateId("all");
                       setSearchQuery("");
                     }}
-                    className="mt-4 px-3 py-1.5 rounded-lg text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+                    className="mt-3.5 px-3 py-1.5 rounded-[3px] text-[12px] font-medium text-[var(--accent)] bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors"
                   >
                     Reset Semua Filter
                   </button>
@@ -360,13 +366,12 @@ export default function AlertPanel({
           </div>
 
           {/* Footer Info */}
-          <div className="px-6 py-3 border-t border-slate-200 bg-white flex items-center justify-between text-xs text-slate-500">
-            <span>
-              Menampilkan <span className="font-semibold text-slate-700">{filteredAlerts.length}</span>{" "}
-              dari {totalCount} peringatan
+          <div className="px-[21px] py-[13px] border-t border-black/[0.08] bg-white flex items-center justify-between text-[11.5px] text-[var(--ink-3)] shrink-0">
+            <span className="font-mono tabular-nums">
+              Menampilkan <span className="font-semibold text-[var(--ink)]">{filteredAlerts.length}</span> dari {totalCount} peringatan
             </span>
-            <span className="text-[11px] text-slate-400">
-              Evaluasi otomatis setiap hari pk 06:30 WIB
+            <span className="text-[11px] text-[var(--ink-3)]">
+              Evaluasi harian 06:30 WIB
             </span>
           </div>
         </aside>

@@ -19,7 +19,12 @@ from app.utils.geo import coordinates_from_point
 logger = logging.getLogger(__name__)
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
-JAKARTA_TZ = zoneinfo.ZoneInfo("Asia/Jakarta")
+
+try:
+    JAKARTA_TZ = zoneinfo.ZoneInfo("Asia/Jakarta")
+except Exception:
+    from datetime import timezone, timedelta
+    JAKARTA_TZ = timezone(timedelta(hours=7))
 
 # Daily metrics requested from Open-Meteo API
 OPEN_METEO_DAILY_VARS = (
@@ -170,19 +175,20 @@ async def sync_weather_for_estate(
         forecast_days=forecast_days,
     )
 
-    daily = data.get("daily", {})
-    dates: List[str] = daily.get("time", [])
+    daily = data.get("daily") or {}
+    dates: List[str] = daily.get("time") or []
     if not dates:
         return 0
 
-    elevation = float(data.get("elevation", 0.0))
-    t_max_list = daily.get("temperature_2m_max", [])
-    t_min_list = daily.get("temperature_2m_min", [])
-    rh_list = daily.get("relative_humidity_2m_mean", [])
-    wind_list = daily.get("wind_speed_10m_max", [])
-    solar_list = daily.get("shortwave_radiation_sum", [])
-    rain_list = daily.get("precipitation_sum", [])
-    et0_openmeteo_list = daily.get("et0_fao_evapotranspiration", [])
+    elevation_raw = data.get("elevation")
+    elevation = float(elevation_raw) if elevation_raw is not None else 0.0
+    t_max_list = daily.get("temperature_2m_max") or []
+    t_min_list = daily.get("temperature_2m_min") or []
+    rh_list = daily.get("relative_humidity_2m_mean") or []
+    wind_list = daily.get("wind_speed_10m_max") or []
+    solar_list = daily.get("shortwave_radiation_sum") or []
+    rain_list = daily.get("precipitation_sum") or []
+    et0_openmeteo_list = daily.get("et0_fao_evapotranspiration") or []
 
     today_date = datetime.now(JAKARTA_TZ).date()
     records_to_upsert: List[Dict[str, Any]] = []

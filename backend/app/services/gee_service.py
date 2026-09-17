@@ -54,17 +54,36 @@ def init_earth_engine() -> bool:
         import ee
 
         key_path = settings.GEE_KEY_PATH
-        sa_email = settings.GEE_SERVICE_ACCOUNT
+        if not (key_path and os.path.isfile(key_path)):
+            local_fallback = os.path.join(os.getcwd(), "paci-x-a7a003954fc1.json")
+            workspace_fallback = r"D:\PEREWANGAN 369\Tani\paci-x-a7a003954fc1.json"
+            if os.path.isfile(local_fallback):
+                key_path = local_fallback
+            elif os.path.isfile(workspace_fallback):
+                key_path = workspace_fallback
+
+        sa_email = settings.GEE_SERVICE_ACCOUNT or "astral-monitor@paci-x.iam.gserviceaccount.com"
         project = settings.GEE_PROJECT or None
 
         if key_path and os.path.isfile(key_path):
             logger.info("Initializing GEE with Service Account JSON: %s", key_path)
-            credentials = ee.ServiceAccountCredentials(sa_email, key_path)
-            ee.Initialize(credentials=credentials, project=project)
+            from google.oauth2 import service_account
+            credentials = service_account.Credentials.from_service_account_file(
+                key_path,
+                scopes=["https://www.googleapis.com/auth/earthengine"]
+            )
+            try:
+                if project:
+                    ee.Initialize(credentials=credentials, project=project)
+                else:
+                    ee.Initialize(credentials=credentials)
+            except Exception as proj_err:
+                logger.warning("Initializing with project '%s' failed (%s). Retrying without project parameter...", project, proj_err)
+                ee.Initialize(credentials=credentials)
         elif sa_email:
             logger.info("Initializing GEE with Service Account email: %s", sa_email)
             credentials = ee.ServiceAccountCredentials(sa_email)
-            ee.Initialize(credentials=credentials, project=project)
+            ee.Initialize(credentials=credentials)
         else:
             logger.info("Attempting default Google Earth Engine initialization...")
             ee.Initialize(project=project)

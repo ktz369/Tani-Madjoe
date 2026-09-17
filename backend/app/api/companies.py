@@ -206,6 +206,12 @@ async def delete_company(
     current_user: User = Depends(get_current_user),
 ):
     """Menghapus entitas perusahaan beserta seluruh hierarki estate dan divisinya."""
+    if current_user.role not in ["superadmin", "admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Akses ditolak: Hanya administrator yang berhak menghapus entitas perusahaan.",
+        )
+
     stmt = select(Company).where(Company.id == company_id)
     result = await db.execute(stmt)
     company = result.scalar_one_or_none()

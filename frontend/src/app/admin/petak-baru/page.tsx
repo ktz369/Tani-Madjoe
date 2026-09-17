@@ -40,6 +40,7 @@ import {
   BatchCompletionModal,
 } from "@/components/plot";
 import { api } from "@/lib/api";
+import { getMapStyle, applyMapboxToken } from "@/lib/mapStyles";
 import {
   Company,
   CropVariety,
@@ -102,10 +103,6 @@ function calculateHectares(coords: [number, number][]): number {
   return Number((areaM2 / 10000).toFixed(4));
 }
 
-// Mapbox Satellite / OSM fallback style configuration
-const MAPBOX_TOKEN =
-  process.env.NEXT_PUBLIC_MAPBOX_TOKEN ||
-  "pk.eyJ1IjoiZXhhbXBsZSIsImEiOiJjbGV4YW1wbGUifQ.example";
 
 export default function PetakBaruPage() {
   const router = useRouter();
@@ -288,21 +285,131 @@ export default function PetakBaruPage() {
     }
   }, [cropType, varieties]);
 
+  // Track activeTab and data in refs for Mapbox event handlers and style switching
+  const activeTabRef = useRef<"single" | "batch">("single");
+  const batchRowsRef = useRef<BatchPlotRow[]>([]);
+  const drawnCoordsRef = useRef<[number, number][]>([]);
+  const isPolygonClosedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  useEffect(() => {
+    batchRowsRef.current = batchRows;
+  }, [batchRows]);
+
+  useEffect(() => {
+    drawnCoordsRef.current = drawnCoords;
+    isPolygonClosedRef.current = isPolygonClosed;
+  }, [drawnCoords, isPolygonClosed]);
+
   // 5. Initialize Mapbox Map
   useEffect(() => {
     if (!mapContainer.current) return;
 
-    mapboxgl.accessToken = MAPBOX_TOKEN;
+    applyMapboxToken(mapboxgl);
 
     const map = new mapboxgl.Map({
       container: mapContainer.current,
-      style: "mapbox://styles/mapbox/satellite-streets-v12",
-      center: [101.8524, 0.5532], // Default Riau / Pelalawan
+      style: getMapStyle("satellite"),
+      center: [111.0636, -8.0843], // Wilayah Kerja Pacitan
       zoom: 14,
     });
 
     map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "top-right");
     map.addControl(new mapboxgl.FullscreenControl(), "top-right");
+
+    const syncBatchPolygons = () => {
+      const batchSource = map.getSource("batch-polygons-source") as mapboxgl.GeoJSONSource;
+      if (!batchSource) return;
+
+      if (activeTabRef.current !== "batch" || batchRowsRef.current.length === 0) {
+        batchSource.setData({
+          type: "FeatureCollection",
+          features: [],
+        });
+        return;
+      }
+
+      const features = batchRowsRef.current.map((row, idx) => ({
+        type: "Feature" as const,
+        geometry: row.geometry,
+        properties: {
+          index: idx,
+          name: row.name,
+          selected: row.selected,
+          fillColor: row.selected ? "#10b981" : "#94a3b8",
+          fillOpacity: row.selected ? 0.45 : 0.15,
+          lineColor: row.selected ? "#047857" : "#64748b",
+          lineWidth: row.selected ? 2.5 : 1.5,
+        },
+      }));
+
+      batchSource.setData({
+        type: "FeatureCollection",
+        features,
+      });
+    };
+
+    const syncDrawnPolygons = () => {
+      const source = map.getSource("drawn-polygon-source") as mapboxgl.GeoJSONSource;
+      if (!source) return;
+
+      const coords = drawnCoordsRef.current;
+      const isClosed = isPolygonClosedRef.current;
+
+      if (activeTabRef.current === "batch" || coords.length === 0) {
+        source.setData({
+          type: "FeatureCollection",
+          features: [],
+        });
+        return;
+      }
+
+      const features: any[] = [];
+      coords.forEach((pt, idx) => {
+        features.push({
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: pt,
+          },
+          properties: { index: idx },
+        });
+      });
+
+      if (coords.length >= 2) {
+        if (isClosed && coords.length >= 3) {
+          const closed =
+            coords[0][0] === coords[coords.length - 1][0] &&
+            coords[0][1] === coords[coords.length - 1][1]
+              ? coords
+              : [...coords, coords[0]];
+
+          features.push({
+            type: "Feature",
+            geometry: {
+              type: "Polygon",
+              coordinates: [closed],
+            },
+          });
+        } else {
+          features.push({
+            type: "Feature",
+            geometry: {
+              type: "LineString",
+              coordinates: coords,
+            },
+          });
+        }
+      }
+
+      source.setData({
+        type: "FeatureCollection",
+        features,
+      });
+    };
 
     const setupLayers = () => {
       if (!map.getSource("drawn-polygon-source")) {
@@ -388,10 +495,22 @@ export default function PetakBaruPage() {
           },
         });
       }
+
+      // Restore spatial data onto recreated layers after style change
+      syncBatchPolygons();
+      syncDrawnPolygons();
+
+      map.resize();
+      setTimeout(() => {
+        if (mapRef.current) mapRef.current.resize();
+      }, 150);
     };
 
     map.on("load", setupLayers);
     map.on("style.load", setupLayers);
+    if (map.isStyleLoaded()) {
+      setupLayers();
+    }
 
     // Map Click Listener to add polygon vertices
     map.on("click", (e) => {
@@ -413,17 +532,17 @@ export default function PetakBaruPage() {
 
     mapRef.current = map;
 
+    const handleWindowResize = () => {
+      map.resize();
+    };
+    window.addEventListener("resize", handleWindowResize);
+
     return () => {
+      window.removeEventListener("resize", handleWindowResize);
       map.remove();
       mapRef.current = null;
     };
   }, []);
-
-  // Track activeTab in ref for event handlers
-  const activeTabRef = useRef<"single" | "batch">("single");
-  useEffect(() => {
-    activeTabRef.current = activeTab;
-  }, [activeTab]);
 
   // Wave 8: Sync Batch Polygons to Mapbox GeoJSON source
   useEffect(() => {
@@ -772,25 +891,38 @@ export default function PetakBaruPage() {
     val: any
   ) => {
     setBatchRows((prev) =>
-      prev.map((r, i) => (i === index ? { ...r, [field]: val } : r))
+      prev.map((r, i) => {
+        if (i !== index) return r;
+        const updated = { ...r, [field]: val };
+        // If crop_type changed, reset variety if incompatible
+        if (field === "crop_type") {
+          const currentVar = varieties.find((v) => v.id === r.variety_id);
+          if (currentVar && currentVar.crop_type !== val) {
+            updated.variety_id = "";
+          }
+        }
+        return updated;
+      })
     );
   };
 
   // Wave 8: Focus Map on specific batch row
   const handleFocusBatchPlot = (row: BatchPlotRow) => {
     if (!mapRef.current) return;
-    const [minLng, minLat, maxLng, maxLat] = row.bounding_box;
-    mapRef.current.fitBounds(
-      [
-        [minLng, minLat],
-        [maxLng, maxLat],
-      ],
-      {
-        padding: { top: 100, bottom: 100, left: 100, right: 100 },
-        duration: 1000,
-        maxZoom: 18,
-      }
-    );
+    if (row.bounding_box && row.bounding_box.length === 4) {
+      const [minLng, minLat, maxLng, maxLat] = row.bounding_box;
+      mapRef.current.fitBounds(
+        [
+          [minLng, minLat],
+          [maxLng, maxLat],
+        ],
+        {
+          padding: { top: 100, bottom: 100, left: 100, right: 100 },
+          duration: 1000,
+          maxZoom: 18,
+        }
+      );
+    }
   };
 
   // Wave 8: Submit Batch Plots Registration
@@ -836,13 +968,10 @@ export default function PetakBaruPage() {
 
   // Change Map Style
   const toggleMapStyle = (style: "satellite" | "streets") => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || mapStyleType === style) return;
     setMapStyleType(style);
-    const styleUrl =
-      style === "satellite"
-        ? "mapbox://styles/mapbox/satellite-streets-v12"
-        : "mapbox://styles/mapbox/outdoors-v12";
-    mapRef.current.setStyle(styleUrl);
+    applyMapboxToken(mapboxgl);
+    mapRef.current.setStyle(getMapStyle(style));
   };
 
   // 7. Save Plot Submit Handler (Ticket 06)
@@ -903,7 +1032,7 @@ export default function PetakBaruPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#fbfbfb] flex flex-col">
+    <div className="min-h-screen bg-[var(--canvas)] pt-[68px] flex flex-col text-[var(--ink)]">
       <Navbar />
 
       {/* Main Workspace Layout */}
@@ -914,27 +1043,27 @@ export default function PetakBaruPage() {
             activeTab === "batch"
               ? "w-full lg:w-[550px] xl:w-[610px]"
               : "w-full lg:w-[377px] xl:w-[377px]"
-          } bg-white border-r border-black/[0.06] flex flex-col h-auto lg:h-[calc(100vh-64px)] overflow-y-auto z-10 transition-all duration-300 shadow-sm`}
+          } bg-white border-r border-black/[0.08] flex flex-col h-auto lg:h-[calc(100vh-68px)] overflow-y-auto z-10 transition-all duration-300`}
         >
-          {/* Apple Editorial Header */}
-          <div className="px-[21px] py-[21px] lg:py-[28px] border-b border-black/[0.06] bg-[#fbfbfb]/80 backdrop-blur-sm">
+          {/* Header */}
+          <div className="px-[21px] py-[16px] border-b border-black/[0.08] bg-white">
             <div className="flex items-center justify-between mb-2">
               <Link
                 href="/peta"
-                className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#71717a] hover:text-[#09090b] transition-colors"
+                className="inline-flex items-center gap-1.5 px-[8px] py-[4px] rounded-[3px] text-[12.5px] text-[var(--ink-2)] hover:bg-[var(--hover)] transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Kembali ke Peta Lahan</span>
               </Link>
-              <span className="text-[11px] font-medium px-2.5 py-0.5 bg-[#ecfdf5] text-[#059669] border border-[#a7f3d0] rounded-full">
+              <span className="text-[11px] font-medium px-[8px] py-[2px] bg-emerald-50 text-[var(--accent-ink)] border border-black/[0.08] rounded-[3px]">
                 SaaS Pertanian
               </span>
             </div>
-            <h1 className="font-serif text-[24px] font-medium tracking-[-0.025em] text-[#09090b] flex items-center gap-2.5">
-              <Sprout className="w-5 h-5 text-[#059669]" />
+            <h1 className="text-[18px] font-semibold tracking-[-0.02em] text-[var(--ink)] flex items-center gap-2">
+              <Sprout className="w-5 h-5 text-[var(--accent)]" />
               <span>{activeTab === "batch" ? "Impor Massal Petak (Batch)" : "Daftar Petak Baru"}</span>
             </h1>
-            <p className="text-[13px] text-[#71717a] font-normal leading-relaxed mt-1">
+            <p className="text-[12.5px] text-[var(--ink-2)] font-normal leading-relaxed mt-1">
               {activeTab === "batch"
                 ? "Unggah berkas KML / KMZ / GeoJSON multi-poligon untuk mendaftarkan banyak petak sekaligus."
                 : "Gambar batas poligon di peta lalu lengkapi informasi agronomis petak."}
@@ -942,7 +1071,7 @@ export default function PetakBaruPage() {
           </div>
 
           {/* Mode Switcher Tabs */}
-          <div className="px-[21px] pt-[21px]">
+          <div className="px-[21px] py-[13px] border-b border-black/[0.08] bg-[var(--field)]">
             <ModeSegmentedControl
               activeTab={activeTab}
               onChange={(tab) => {
@@ -954,7 +1083,7 @@ export default function PetakBaruPage() {
 
           {/* Error Message */}
           {errorMessage && (
-            <div className="mx-[21px] mt-3 p-3 bg-rose-50 border border-rose-200 text-rose-800 text-[12px] rounded-[13px] flex items-start gap-2">
+            <div className="mx-[21px] mt-3 p-3 bg-rose-50 border border-rose-200 text-rose-800 text-[12px] rounded-[3px] flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
               <span>{errorMessage}</span>
             </div>
@@ -965,27 +1094,27 @@ export default function PetakBaruPage() {
             <>
               {/* Success Notification Banner */}
               {successPlot && (
-                <div className="p-4 bg-[#ecfdf5] border-b border-[#a7f3d0] text-[#059669] text-sm">
+                <div className="p-4 bg-emerald-50 border-b border-black/[0.08] text-[var(--accent-ink)] text-sm">
                   <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-[#059669] flex-shrink-0 mt-0.5" />
+                    <CheckCircle2 className="w-5 h-5 text-[var(--accent)] flex-shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <p className="font-semibold text-[#09090b]">
+                      <p className="font-semibold text-[var(--ink)]">
                         Petak &quot;{successPlot.name}&quot; Berhasil Didaftarkan!
                       </p>
-                      <p className="text-xs text-[#71717a] mt-0.5">
-                        Luas: <span className="font-bold text-[#09090b]">{successPlot.area_hectares} ha</span> | Tanaman:{" "}
-                        <span className="capitalize font-semibold text-[#09090b]">{successPlot.crop_type}</span>
+                      <p className="text-xs text-[var(--ink-2)] mt-0.5">
+                        Luas: <span className="font-bold text-[var(--ink)]">{successPlot.area_hectares} ha</span> | Tanaman:{" "}
+                        <span className="capitalize font-semibold text-[var(--ink)]">{successPlot.crop_type}</span>
                       </p>
                       <div className="mt-3 flex items-center gap-2">
                         <Link
                           href={`/petak/${successPlot.id}`}
-                          className="px-3.5 py-1.5 bg-[#059669] hover:bg-[#047857] text-white rounded-full text-xs font-semibold shadow-xs transition-all"
+                          className="h-[30px] px-[13px] rounded-[3px] bg-[var(--accent)] hover:bg-[#047857] text-white text-xs font-medium flex items-center transition-colors"
                         >
                           Buka Detail Petak &rarr;
                         </Link>
                         <Link
                           href="/peta"
-                          className="px-3.5 py-1.5 bg-white border border-black/[0.08] text-[#09090b] hover:bg-[#f4f4f5] rounded-full text-xs font-medium transition-colors"
+                          className="h-[30px] px-[13px] rounded-[3px] border border-black/[0.08] bg-white text-[var(--ink-2)] hover:bg-[var(--hover)] text-xs font-medium flex items-center transition-colors"
                         >
                           Peta Lahan
                         </Link>
@@ -999,7 +1128,7 @@ export default function PetakBaruPage() {
                             setCalculatedAreaHa(0);
                             setImportedFileInfo(null);
                           }}
-                          className="px-3.5 py-1.5 bg-[#f4f4f5] hover:bg-[#e4e4e7] text-[#71717a] rounded-full text-xs font-medium transition-colors"
+                          className="h-[30px] px-[13px] rounded-[3px] border border-black/[0.08] bg-white text-[var(--ink-2)] hover:bg-[var(--hover)] text-xs font-medium flex items-center transition-colors"
                         >
                           Tambah Lain
                         </button>
@@ -1010,15 +1139,15 @@ export default function PetakBaruPage() {
               )}
 
               {/* Registration Form */}
-              <form onSubmit={handleSubmitPlot} className="p-[21px] space-y-[21px] flex-1">
-                {/* Wave 7 & 9: Beautiful UI Canvas Dropzone */}
-                <div className="space-y-2">
+              <form onSubmit={handleSubmitPlot} className="p-[21px] space-y-[16px] flex-1">
+                {/* Wave 7 & 9: Spatial Dropzone */}
+                <div className="space-y-2 pb-[16px] border-b border-black/[0.08]">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#71717a] uppercase tracking-wider">
-                      <UploadCloud className="w-3.5 h-3.5 text-[#059669]" />
+                    <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.04em] text-[var(--ink-3)] font-semibold">
+                      <UploadCloud className="w-3.5 h-3.5 text-[var(--accent)]" />
                       <span>Impor Berkas Geospasial</span>
                     </div>
-                    <span className="text-[10px] font-semibold text-[#059669] bg-[#ecfdf5] border border-[#a7f3d0] px-2 py-0.5 rounded-full">
+                    <span className="text-[10px] font-semibold text-[var(--accent)] bg-emerald-50 border border-black/[0.08] px-2 py-0.5 rounded-[3px]">
                       KML / KMZ / GeoJSON
                     </span>
                   </div>
@@ -1044,21 +1173,21 @@ export default function PetakBaruPage() {
                 </div>
 
                 {/* 1. Hierarchy Selectors */}
-                <div className="space-y-[13px] p-[16px] bg-[#fcfdfd] rounded-[21px] border border-black/[0.06]">
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#71717a] uppercase tracking-wider">
-                    <Building2 className="w-3.5 h-3.5 text-[#059669]" />
+                <div className="space-y-[13px] pb-[16px] border-b border-black/[0.08]">
+                  <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.04em] text-[var(--ink-3)] font-semibold">
+                    <Building2 className="w-3.5 h-3.5 text-[var(--accent)]" />
                     <span>Hierarki Lokasi Petak</span>
                   </div>
 
                   {/* Perusahaan */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[#71717a] mb-1">
+                    <label className="block text-[11px] font-medium text-[var(--ink-2)] mb-1">
                       Perusahaan
                     </label>
                     <select
                       value={selectedCompanyId}
                       onChange={(e) => setSelectedCompanyId(Number(e.target.value) || "")}
-                      className="w-full text-[12px] rounded-[10px] border border-black/[0.08] bg-white px-2.5 py-1.5 text-[#09090b] focus:border-[#059669] focus:ring-1 focus:ring-[#059669]"
+                      className="w-full border border-black/[0.08] rounded-[3px] h-[34px] px-[13px] text-[13px] bg-white text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                       required
                     >
                       <option value="">-- Pilih Perusahaan --</option>
@@ -1072,14 +1201,14 @@ export default function PetakBaruPage() {
 
                   {/* Estate */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[#71717a] mb-1">
+                    <label className="block text-[11px] font-medium text-[var(--ink-2)] mb-1">
                       Perkebunan / Estate
                     </label>
                     <select
                       value={selectedEstateId}
                       onChange={(e) => setSelectedEstateId(Number(e.target.value) || "")}
                       disabled={!selectedCompanyId || estates.length === 0}
-                      className="w-full text-[12px] rounded-[10px] border border-black/[0.08] bg-white px-2.5 py-1.5 text-[#09090b] focus:border-[#059669] focus:ring-1 focus:ring-[#059669] disabled:bg-[#f4f4f5] disabled:text-[#a1a1aa]"
+                      className="w-full border border-black/[0.08] rounded-[3px] h-[34px] px-[13px] text-[13px] bg-white text-[var(--ink)] focus:outline-none focus:border-[var(--accent)] disabled:bg-[var(--field)] disabled:text-[var(--ink-3)]"
                       required
                     >
                       <option value="">-- Pilih Estate --</option>
@@ -1093,14 +1222,14 @@ export default function PetakBaruPage() {
 
                   {/* Divisi */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[#71717a] mb-1">
+                    <label className="block text-[11px] font-medium text-[var(--ink-2)] mb-1">
                       Divisi / Afdeling
                     </label>
                     <select
                       value={selectedDivisionId}
                       onChange={(e) => setSelectedDivisionId(Number(e.target.value) || "")}
                       disabled={!selectedEstateId || divisions.length === 0}
-                      className="w-full text-[12px] rounded-[10px] border border-black/[0.08] bg-white px-2.5 py-1.5 text-[#09090b] focus:border-[#059669] focus:ring-1 focus:ring-[#059669] disabled:bg-[#f4f4f5] disabled:text-[#a1a1aa]"
+                      className="w-full border border-black/[0.08] rounded-[3px] h-[34px] px-[13px] text-[13px] bg-white text-[var(--ink)] focus:outline-none focus:border-[var(--accent)] disabled:bg-[var(--field)] disabled:text-[var(--ink-3)]"
                       required
                     >
                       <option value="">-- Pilih Divisi --</option>
@@ -1114,9 +1243,9 @@ export default function PetakBaruPage() {
                 </div>
 
                 {/* 2. Plot Name & Agronomics */}
-                <div className="space-y-[13px] p-[16px] bg-[#fcfdfd] rounded-[21px] border border-black/[0.06]">
+                <div className="space-y-[13px] pb-[16px] border-b border-black/[0.08]">
                   <div>
-                    <label className="block text-[11px] font-medium text-[#71717a] mb-1">
+                    <label className="block text-[11px] font-medium text-[var(--ink-2)] mb-1">
                       Nama Petak Lahan <span className="text-rose-500">*</span>
                     </label>
                     <input
@@ -1124,36 +1253,36 @@ export default function PetakBaruPage() {
                       placeholder="Contoh: Petak A1 - Blok Utara"
                       value={plotName}
                       onChange={(e) => setPlotName(e.target.value)}
-                      className="w-full text-[13px] rounded-[10px] border border-black/[0.08] bg-white px-3 py-2 text-[#09090b] focus:border-[#059669] focus:ring-1 focus:ring-[#059669]"
+                      className="w-full border border-black/[0.08] rounded-[3px] h-[34px] px-[13px] text-[13px] bg-white text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                       required
                     />
                   </div>
 
                   {/* Crop Type Selector */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[#71717a] mb-1.5">
+                    <label className="block text-[11px] font-medium text-[var(--ink-2)] mb-1.5">
                       Komoditas Tanaman
                     </label>
                     <div className="grid grid-cols-2 gap-[8px]">
                       <button
                         type="button"
                         onClick={() => setCropType("padi")}
-                        className={`flex items-center justify-center gap-2 py-2 px-3 rounded-[10px] border text-[12px] font-medium transition-all ${
+                        className={`flex items-center justify-center gap-2 h-[34px] px-[13px] rounded-[3px] text-[13px] font-medium transition-colors ${
                           cropType === "padi"
-                            ? "bg-[#ecfdf5] border-[#a7f3d0] text-[#059669] font-semibold shadow-xs"
-                            : "border-black/[0.08] text-[#71717a] hover:bg-[#fcfdfd] bg-white"
+                            ? "bg-emerald-50 border border-[var(--accent)] text-[var(--accent-ink)]"
+                            : "border border-black/[0.08] bg-white text-[var(--ink-2)] hover:bg-[var(--hover)]"
                         }`}
                       >
-                        <Sprout className="w-4 h-4 text-[#059669]" />
+                        <Sprout className="w-4 h-4 text-[var(--accent)]" />
                         <span>Padi (Oryza)</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setCropType("jagung")}
-                        className={`flex items-center justify-center gap-2 py-2 px-3 rounded-[10px] border text-[12px] font-medium transition-all ${
+                        className={`flex items-center justify-center gap-2 h-[34px] px-[13px] rounded-[3px] text-[13px] font-medium transition-colors ${
                           cropType === "jagung"
-                            ? "bg-amber-50 border-amber-200 text-amber-900 font-semibold shadow-xs"
-                            : "border-black/[0.08] text-[#71717a] hover:bg-[#fcfdfd] bg-white"
+                            ? "bg-amber-50 border border-amber-300 text-amber-900"
+                            : "border border-black/[0.08] bg-white text-[var(--ink-2)] hover:bg-[var(--hover)]"
                         }`}
                       >
                         <Wheat className="w-4 h-4 text-amber-600" />
@@ -1164,13 +1293,13 @@ export default function PetakBaruPage() {
 
                   {/* Variety Dropdown */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[#71717a] mb-1">
+                    <label className="block text-[11px] font-medium text-[var(--ink-2)] mb-1">
                       Varietas Benih
                     </label>
                     <select
                       value={selectedVarietyId}
                       onChange={(e) => setSelectedVarietyId(Number(e.target.value) || "")}
-                      className="w-full text-[12px] rounded-[10px] border border-black/[0.08] bg-white px-2.5 py-1.5 text-[#09090b] focus:border-[#059669] focus:ring-1 focus:ring-[#059669]"
+                      className="w-full border border-black/[0.08] rounded-[3px] h-[34px] px-[13px] text-[13px] bg-white text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                     >
                       <option value="">-- Pilih Varietas ({cropType}) --</option>
                       {filteredVarieties.map((v) => (
@@ -1184,54 +1313,54 @@ export default function PetakBaruPage() {
                   {/* Planting Date & Calculated HST */}
                   <div className="grid grid-cols-2 gap-[8px]">
                     <div>
-                      <label className="block text-[11px] font-medium text-[#71717a] mb-1">
+                      <label className="block text-[11px] font-medium text-[var(--ink-2)] mb-1">
                         Tanggal Tanam
                       </label>
                       <input
                         type="date"
                         value={plantingDate}
                         onChange={(e) => setPlantingDate(e.target.value)}
-                        className="w-full text-[12px] rounded-[10px] border border-black/[0.08] bg-white px-2.5 py-1.5 text-[#09090b] focus:border-[#059669] focus:ring-1 focus:ring-[#059669]"
+                        className="w-full border border-black/[0.08] rounded-[3px] h-[34px] px-[13px] text-[13px] bg-white text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-medium text-[#71717a] mb-1">
+                      <label className="block text-[11px] font-medium text-[var(--ink-2)] mb-1">
                         Hari Setelah Tanam
                       </label>
-                      <div className="w-full py-1.5 px-2.5 bg-[#f4f4f5] border border-black/[0.04] rounded-[10px] text-[12px] font-mono tabular-nums font-semibold text-[#059669] text-center">
+                      <div className="w-full h-[34px] px-[13px] bg-[var(--field)] border border-black/[0.08] rounded-[3px] text-[12px] font-mono tabular-nums font-semibold text-[var(--accent-ink)] flex items-center justify-center">
                         {currentHstPreview} HST
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* 3. Polygon Geometry Status Card */}
-                <div className="p-[16px] bg-[#fcfdfd] border border-black/[0.06] rounded-[21px] space-y-[13px]">
+                {/* 3. Polygon Geometry Status */}
+                <div className="space-y-[13px] pb-[16px]">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-[#71717a] uppercase tracking-wider flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-[#059669]" />
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--ink-3)] flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-[var(--accent)]" />
                       <span>Status Poligon Peta</span>
                     </span>
                     <span
-                      className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full ${
+                      className={`text-[11px] font-medium px-[8px] py-[2px] rounded-[3px] border border-black/[0.08] ${
                         drawnCoords.length >= 3
-                          ? "bg-[#ecfdf5] text-[#059669] border border-[#a7f3d0]"
-                          : "bg-[#f4f4f5] text-[#71717a]"
+                          ? "bg-emerald-50 text-[var(--accent-ink)]"
+                          : "bg-[var(--field)] text-[var(--ink-2)]"
                       }`}
                     >
                       {drawnCoords.length} Titik Sudut
                     </span>
                   </div>
 
-                  <div className="bg-white p-[13px] rounded-[13px] border border-black/[0.04] flex items-center justify-between shadow-2xs">
+                  <div className="bg-white p-[13px] rounded-[3px] border border-black/[0.08] flex items-center justify-between">
                     <div>
-                      <span className="text-[11px] text-[#71717a] block">Luas Terhitung:</span>
-                      <span className="text-[18px] font-bold text-[#059669] font-mono tabular-nums">
+                      <span className="text-[11px] text-[var(--ink-2)] block">Luas Terhitung:</span>
+                      <span className="text-[18px] font-bold text-[var(--accent)] font-mono tabular-nums">
                         {calculatedAreaHa.toFixed(2)}{" "}
-                        <span className="text-[12px] font-medium text-[#71717a]">hektar</span>
+                        <span className="text-[12px] font-medium text-[var(--ink-2)]">hektar</span>
                       </span>
                     </div>
-                    <div className="text-right text-[12px] text-[#71717a] font-mono tabular-nums">
+                    <div className="text-right text-[12px] text-[var(--ink-2)] font-mono tabular-nums">
                       <span>{(calculatedAreaHa * 10000).toLocaleString("id-ID")} m²</span>
                     </div>
                   </div>
@@ -1242,7 +1371,7 @@ export default function PetakBaruPage() {
                       type="button"
                       onClick={handleClosePolygon}
                       disabled={drawnCoords.length < 3 || isPolygonClosed}
-                      className="flex-1 h-[36px] px-3 bg-[#059669] hover:bg-[#047857] disabled:bg-[#e4e4e7] disabled:text-[#a1a1aa] text-white rounded-[10px] text-[12px] font-medium transition-all flex items-center justify-center gap-1.5 shadow-2xs"
+                      className="flex-1 h-[34px] px-[21px] rounded-[3px] bg-[var(--accent)] hover:bg-[#047857] disabled:opacity-40 text-white text-[13px] font-medium transition-colors flex items-center justify-center gap-1.5"
                     >
                       <Check className="w-3.5 h-3.5" />
                       <span>Tutup Poligon</span>
@@ -1251,7 +1380,7 @@ export default function PetakBaruPage() {
                       type="button"
                       onClick={handleUndoPoint}
                       disabled={drawnCoords.length === 0}
-                      className="h-[36px] px-3 bg-white border border-black/[0.08] hover:bg-[#f4f4f5] disabled:opacity-40 text-[#09090b] rounded-[10px] text-[12px] font-medium transition-colors flex items-center justify-center"
+                      className="h-[34px] px-[13px] rounded-[3px] border border-black/[0.08] bg-white text-[var(--ink-2)] hover:bg-[var(--hover)] disabled:opacity-40 text-[13px] transition-colors flex items-center justify-center"
                       title="Hapus titik terakhir"
                     >
                       <Undo2 className="w-3.5 h-3.5" />
@@ -1260,7 +1389,7 @@ export default function PetakBaruPage() {
                       type="button"
                       onClick={handleClearPolygon}
                       disabled={drawnCoords.length === 0}
-                      className="h-[36px] px-3 bg-white border border-rose-200 hover:bg-rose-50 disabled:opacity-40 text-rose-600 rounded-[10px] text-[12px] font-medium transition-colors flex items-center justify-center"
+                      className="h-[34px] px-[13px] rounded-[3px] border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 disabled:opacity-40 text-[13px] transition-colors flex items-center justify-center"
                       title="Hapus semua titik"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
@@ -1273,7 +1402,7 @@ export default function PetakBaruPage() {
                   <button
                     type="submit"
                     disabled={loading || drawnCoords.length < 3}
-                    className="w-full h-[42px] px-[21px] bg-[#059669] hover:bg-[#047857] disabled:bg-[#e4e4e7] disabled:text-[#a1a1aa] text-white font-medium rounded-full text-[13px] shadow-[0_1px_2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.22)] active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
+                    className="w-full h-[34px] px-[21px] rounded-[3px] bg-[var(--accent)] hover:bg-[#047857] disabled:opacity-40 text-white font-medium text-[13px] transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
                   >
                     {loading ? (
                       <div className="flex items-center gap-2">
@@ -1294,24 +1423,24 @@ export default function PetakBaruPage() {
 
           {/* Batch Import Wizard Mode Content */}
           {activeTab === "batch" && (
-            <div className="p-[21px] space-y-[21px] flex-1">
+            <div className="p-[21px] space-y-[16px] flex-1">
               {/* Destination Hierarchy Selectors */}
-              <div className="space-y-[13px] p-[16px] bg-[#fcfdfd] rounded-[21px] border border-black/[0.06]">
-                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#71717a] uppercase tracking-wider">
-                  <Building2 className="w-3.5 h-3.5 text-[#059669]" />
+              <div className="space-y-[13px] pb-[16px] border-b border-black/[0.08]">
+                <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.04em] text-[var(--ink-3)] font-semibold">
+                  <Building2 className="w-3.5 h-3.5 text-[var(--accent)]" />
                   <span>Divisi Tujuan Pendaftaran Massal</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-[8px]">
                   {/* Perusahaan */}
                   <div>
-                    <label className="block text-[10px] font-medium text-[#71717a] mb-1">
+                    <label className="block text-[11px] font-medium text-[var(--ink-2)] mb-1">
                       Perusahaan
                     </label>
                     <select
                       value={selectedCompanyId}
                       onChange={(e) => setSelectedCompanyId(Number(e.target.value) || "")}
-                      className="w-full text-[12px] rounded-[10px] border border-black/[0.08] bg-white px-2 py-1.5 text-[#09090b] focus:border-[#059669]"
+                      className="w-full border border-black/[0.08] rounded-[3px] h-[34px] px-[10px] text-[13px] bg-white text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                     >
                       <option value="">-- Pilih --</option>
                       {companies.map((c) => (
@@ -1324,14 +1453,14 @@ export default function PetakBaruPage() {
 
                   {/* Estate */}
                   <div>
-                    <label className="block text-[10px] font-medium text-[#71717a] mb-1">
+                    <label className="block text-[11px] font-medium text-[var(--ink-2)] mb-1">
                       Estate
                     </label>
                     <select
                       value={selectedEstateId}
                       onChange={(e) => setSelectedEstateId(Number(e.target.value) || "")}
                       disabled={!selectedCompanyId || estates.length === 0}
-                      className="w-full text-[12px] rounded-[10px] border border-black/[0.08] bg-white px-2 py-1.5 text-[#09090b] focus:border-[#059669] disabled:bg-[#f4f4f5] disabled:text-[#a1a1aa]"
+                      className="w-full border border-black/[0.08] rounded-[3px] h-[34px] px-[10px] text-[13px] bg-white text-[var(--ink)] focus:outline-none focus:border-[var(--accent)] disabled:bg-[var(--field)] disabled:text-[var(--ink-3)]"
                     >
                       <option value="">-- Pilih --</option>
                       {estates.map((est) => (
@@ -1344,14 +1473,14 @@ export default function PetakBaruPage() {
 
                   {/* Divisi */}
                   <div>
-                    <label className="block text-[10px] font-medium text-[#71717a] mb-1">
+                    <label className="block text-[11px] font-medium text-[var(--ink-2)] mb-1">
                       Divisi <span className="text-rose-500">*</span>
                     </label>
                     <select
                       value={selectedDivisionId}
                       onChange={(e) => setSelectedDivisionId(Number(e.target.value) || "")}
                       disabled={!selectedEstateId || divisions.length === 0}
-                      className="w-full text-[12px] rounded-[10px] border border-black/[0.08] bg-white px-2 py-1.5 text-[#09090b] focus:border-[#059669] disabled:bg-[#f4f4f5] disabled:text-[#a1a1aa] font-semibold"
+                      className="w-full border border-black/[0.08] rounded-[3px] h-[34px] px-[10px] text-[13px] bg-white text-[var(--ink)] focus:outline-none focus:border-[var(--accent)] disabled:bg-[var(--field)] disabled:text-[var(--ink-3)] font-medium"
                     >
                       <option value="">-- Pilih Divisi --</option>
                       {divisions.map((div) => (
@@ -1368,11 +1497,11 @@ export default function PetakBaruPage() {
               {!batchSummary ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#71717a] uppercase tracking-wider">
-                      <UploadCloud className="w-3.5 h-3.5 text-[#059669]" />
+                    <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.04em] text-[var(--ink-3)] font-semibold">
+                      <UploadCloud className="w-3.5 h-3.5 text-[var(--accent)]" />
                       <span>Unggah Berkas Koleksi Multi-Petak</span>
                     </div>
-                    <span className="text-[10px] font-semibold text-[#059669] bg-[#ecfdf5] border border-[#a7f3d0] px-2 py-0.5 rounded-full">
+                    <span className="text-[10px] font-semibold text-[var(--accent)] bg-emerald-50 border border-black/[0.08] px-2 py-0.5 rounded-[3px]">
                       KML / KMZ / GeoJSON
                     </span>
                   </div>
@@ -1422,63 +1551,65 @@ export default function PetakBaruPage() {
         </div>
 
         {/* Right Side: Interactive Mapbox Map */}
-        <div className="flex-1 relative h-[500px] lg:h-[calc(100vh-64px)] w-full bg-slate-100 border-l border-black/[0.06]">
-          {/* Map Container */}
-          <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
+        <div className="flex-1 relative h-[500px] lg:h-[calc(100vh-68px)] w-full bg-[var(--canvas)] p-3">
+          {/* Preview Map Container: flat with border border-black/[0.08] rounded-[3px] */}
+          <div className="w-full h-full relative border border-black/[0.08] rounded-[3px] overflow-hidden bg-white">
+            <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
 
-          {/* Map Floating Top Toolbar */}
-          <div className="absolute top-4 left-4 z-10 flex flex-wrap items-center gap-2 pointer-events-auto">
-            {/* Drawing Instructions Badge */}
-            <div className="px-3.5 py-2 bg-white/85 backdrop-blur-xl rounded-full shadow-sm border border-black/[0.06] text-[12px] font-medium text-[#09090b] flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#059669] animate-pulse" />
-              <span>
-                {activeTab === "batch"
-                  ? batchRows.length === 0
-                    ? "Unggah berkas KML/GeoJSON koleksi untuk melihat semua poligon di peta"
-                    : `${batchRows.filter((r) => r.selected).length} dari ${batchRows.length} petak terpilih ditampilkan di peta.`
-                  : drawnCoords.length === 0
-                  ? "Unggah berkas KML/GeoJSON di panel kiri atau klik di peta untuk menggambar"
-                  : isPolygonClosed
-                  ? `Batas poligon terverifikasi (${drawnCoords.length} titik). Siap didaftarkan.`
-                  : `Menambahkan titik ke-${drawnCoords.length + 1}. Minimal 3 titik.`}
-              </span>
+            {/* Map Floating Top Toolbar */}
+            <div className="absolute top-3 left-3 z-10 flex flex-wrap items-center gap-2 pointer-events-auto">
+              {/* Drawing Instructions Badge */}
+              <div className="px-[13px] py-[6px] bg-white/90 backdrop-blur-md rounded-[3px] border border-black/[0.08] text-[12px] font-medium text-[var(--ink)] flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse" />
+                <span>
+                  {activeTab === "batch"
+                    ? batchRows.length === 0
+                      ? "Unggah berkas KML/GeoJSON koleksi untuk melihat semua poligon di peta"
+                      : `${batchRows.filter((r) => r.selected).length} dari ${batchRows.length} petak terpilih ditampilkan di peta.`
+                    : drawnCoords.length === 0
+                    ? "Unggah berkas KML/GeoJSON di panel kiri atau klik di peta untuk menggambar"
+                    : isPolygonClosed
+                    ? `Batas poligon terverifikasi (${drawnCoords.length} titik). Siap didaftarkan.`
+                    : `Menambahkan titik ke-${drawnCoords.length + 1}. Minimal 3 titik.`}
+                </span>
+              </div>
+
+              {/* Map Style Selector */}
+              <div className="flex items-center bg-white/90 backdrop-blur-md rounded-[3px] border border-black/[0.08] p-[2px] gap-1">
+                <button
+                  type="button"
+                  onClick={() => toggleMapStyle("satellite")}
+                  className={`px-[10px] py-[4px] text-[12px] font-medium rounded-[2px] transition-colors ${
+                    mapStyleType === "satellite"
+                      ? "bg-[var(--accent)] text-white"
+                      : "text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--hover)]"
+                  }`}
+                >
+                  Satelit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleMapStyle("streets")}
+                  className={`px-[10px] py-[4px] text-[12px] font-medium rounded-[2px] transition-colors ${
+                    mapStyleType === "streets"
+                      ? "bg-[var(--accent)] text-white"
+                      : "text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--hover)]"
+                  }`}
+                >
+                  Peta
+                </button>
+              </div>
             </div>
 
-            {/* Map Style Selector */}
-            <div className="flex items-center bg-white/85 backdrop-blur-xl rounded-full shadow-sm border border-black/[0.06] p-1 gap-1">
-              <button
-                type="button"
-                onClick={() => toggleMapStyle("satellite")}
-                className={`px-3 py-1 text-[12px] font-medium rounded-full transition-all ${
-                  mapStyleType === "satellite"
-                    ? "bg-[#059669] text-white shadow-xs"
-                    : "text-[#71717a] hover:text-[#09090b]"
-                }`}
-              >
-                Satelit
-              </button>
-              <button
-                type="button"
-                onClick={() => toggleMapStyle("streets")}
-                className={`px-3 py-1 text-[12px] font-medium rounded-full transition-all ${
-                  mapStyleType === "streets"
-                    ? "bg-[#059669] text-white shadow-xs"
-                    : "text-[#71717a] hover:text-[#09090b]"
-                }`}
-              >
-                Vektor
-              </button>
+            {/* Map Floating Bottom Helper */}
+            <div className="absolute bottom-4 left-4 z-10 hidden sm:flex items-center gap-3 bg-white/90 backdrop-blur-md text-[var(--ink)] px-[13px] py-[6px] rounded-[3px] text-[11.5px] font-medium border border-black/[0.08]">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[var(--accent)]" />
+                <span>Titik Sudut Batas Petak</span>
+              </div>
+              <span className="text-black/20">|</span>
+              <span>Luas dihitung presisi geodesik WGS84</span>
             </div>
-          </div>
-
-          {/* Map Floating Bottom Helper */}
-          <div className="absolute bottom-6 left-6 z-10 hidden sm:flex items-center gap-3 bg-white/85 backdrop-blur-xl text-[#09090b] px-3.5 py-1.5 rounded-full text-[11.5px] font-medium shadow-sm border border-black/[0.06]">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#059669]" />
-              <span>Titik Sudut Batas Petak</span>
-            </div>
-            <span className="text-black/20">|</span>
-            <span>Luas dihitung presisi geodesik WGS84</span>
           </div>
         </div>
       </main>

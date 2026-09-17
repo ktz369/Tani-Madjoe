@@ -20,12 +20,17 @@ import {
   X,
   Radio,
   Activity,
+  Bug,
 } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import PlotSatellitePanel from "@/components/satellite/PlotSatellitePanel";
 import TimelineSlider from "@/components/map/TimelineSlider";
 import SatelliteOverlayControl from "@/components/map/SatelliteOverlayControl";
+import { PestScoutingModal } from "@/components/plot";
 import { api } from "@/lib/api";
+import { operationsApi } from "@/lib/operationsApi";
+import { generatePestQuarantineBuffer, QuarantineGeoJSON } from "@/lib/duckdb-spatial";
+import { PestScoutingReport } from "@/types/operations";
 import {
   Estate,
   EstateIndicesTimeline,
@@ -33,15 +38,13 @@ import {
   PlotSummary,
   SatelliteTileInfo,
 } from "@/types";
-
-const MAPBOX_TOKEN =
-  process.env.NEXT_PUBLIC_MAPBOX_TOKEN ||
-  "pk.eyJ1IjoiZXhhbXBsZSIsImEiOiJjbGV4YW1wbGUifQ.example";
+import { applyMapboxToken, getMapStyle } from "@/lib/mapStyles";
+import { BENGKOK_1_COORDINATES } from "@/lib/bengkokGeometry";
 
 // Helper konversi nilai NDVI ke kode warna HEX
 const getNdviColor = (val: number | null | undefined): string => {
   if (val === null || val === undefined) return "#94a3b8"; // slate-400 (belum ada data)
-  if (val < 0.3) return "#ef4444"; // red-500 (kritis)
+  if (val < 0.3) return "#a8a29e"; // stone-400 (bera / tanah terbuka)
   if (val < 0.55) return "#f59e0b"; // amber-500 (waspada)
   if (val <= 0.75) return "#10b981"; // emerald-500 (baik)
   return "#047857"; // emerald-700 (sangat baik)
@@ -85,6 +88,26 @@ export default function PetaLahanPage() {
   const [satelliteOpacity, setSatelliteOpacity] = useState<number>(0.85);
   const [loadingSatelliteTile, setLoadingSatelliteTile] = useState<boolean>(false);
   const [satelliteTileInfo, setSatelliteTileInfo] = useState<SatelliteTileInfo | null>(null);
+  const [isMapLoaded, setIsMapLoaded] = useState<boolean>(false);
+  const [mapStyleEpoch, setMapStyleEpoch] = useState<number>(0);
+
+  // --- OPS-06: DuckDB-WASM Pest Quarantine & Scouting State ---
+  const [scoutingReports, setScoutingReports] = useState<PestScoutingReport[]>([]);
+  const [quarantineBufferGeoJSON, setQuarantineBufferGeoJSON] = useState<QuarantineGeoJSON | null>(null);
+  const [showQuarantineOverlay, setShowQuarantineOverlay] = useState<boolean>(true);
+  const [showScoutingModal, setShowScoutingModal] = useState<boolean>(false);
+
+  // Refs to prevent unnecessary map rebuilds while maintaining fresh references
+  const plotsRef = useRef<Plot[]>([]);
+  const hasFittedBoundsRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    plotsRef.current = plots;
+  }, [plots]);
+
+  useEffect(() => {
+    hasFittedBoundsRef.current = false;
+  }, [selectedEstateId]);
 
   // 1. Initial Load: Estates
   useEffect(() => {
@@ -92,9 +115,10 @@ export default function PetaLahanPage() {
       try {
         setLoadingEstates(true);
         const res = await api.get<Estate[]>("/estates");
-        setEstates(res.data);
-        if (res.data.length > 0) {
-          setSelectedEstateId(res.data[0].id);
+        const estList = Array.isArray(res.data) ? res.data : [];
+        setEstates(estList);
+        if (estList.length > 0) {
+          setSelectedEstateId(estList[0].id);
         }
       } catch (err) {
         console.error("Gagal memuat perkebunan/estate:", err);
@@ -121,7 +145,8 @@ export default function PetaLahanPage() {
           api.get<PlotSummary>(`/estates/${selectedEstateId}/plots/summary`).catch(() => null),
         ]);
 
-        setPlots(plotsRes.data);
+        const plotList = Array.isArray(plotsRes.data) ? plotsRes.data : [];
+        setPlots(plotList);
         if (summaryRes) {
           setSummary(summaryRes.data);
         }
@@ -149,11 +174,12 @@ export default function PetaLahanPage() {
         const res = await api.get<EstateIndicesTimeline>(
           `/estates/${selectedEstateId}/indices-timeline`
         );
-        setTimelineDates(res.data.dates);
-        setTimelineData(res.data.timeline);
-        if (res.data.dates.length > 0) {
+        const dates = Array.isArray(res.data?.dates) ? res.data.dates : [];
+        setTimelineDates(dates);
+        setTimelineData(res.data?.timeline || {});
+        if (dates.length > 0) {
           // Default ke tanggal observasi paling mutakhir
-          setActiveDateIndex(res.data.dates.length - 1);
+          setActiveDateIndex(dates.length - 1);
         }
       } catch (err) {
         console.error("Gagal memuat timeline NDVI perkebunan:", err);
@@ -178,23 +204,8 @@ export default function PetaLahanPage() {
   }, [isPlayingTimeline, timelineDates.length, playbackSpeed]);
 
   // 5. Initialize Mapbox GL Map
-  useEffect(() => {
-    if (!mapContainer.current) return;
-
-    mapboxgl.accessToken = MAPBOX_TOKEN;
-
-    const map = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: "mapbox://styles/mapbox/satellite-streets-v12",
-      center: [101.8524, 0.5532],
-      zoom: 14,
-    });
-
-    map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "top-right");
-    map.addControl(new mapboxgl.FullscreenControl(), "top-right");
-
-    map.on("load", () => {
-      // Source for plots polygons
+  const initMapLayers = (map: mapboxgl.Map) => {
+    if (!map.getSource("estate-plots")) {
       map.addSource("estate-plots", {
         type: "geojson",
         data: {
@@ -202,8 +213,9 @@ export default function PetaLahanPage() {
           features: [],
         },
       });
+    }
 
-      // Fill layer with dynamic fill_color
+    if (!map.getLayer("estate-plots-fill")) {
       map.addLayer({
         id: "estate-plots-fill",
         type: "fill",
@@ -213,8 +225,9 @@ export default function PetaLahanPage() {
           "fill-opacity": 0.55,
         },
       });
+    }
 
-      // Outline layer
+    if (!map.getLayer("estate-plots-line")) {
       map.addLayer({
         id: "estate-plots-line",
         type: "line",
@@ -225,8 +238,9 @@ export default function PetaLahanPage() {
           "line-opacity": 0.9,
         },
       });
+    }
 
-      // Highlight line layer for selected/hovered plot
+    if (!map.getLayer("estate-plots-highlight")) {
       map.addLayer({
         id: "estate-plots-highlight",
         type: "line",
@@ -237,6 +251,130 @@ export default function PetaLahanPage() {
         },
         filter: ["==", "id", ""],
       });
+    }
+
+    // Layer Karantina Spasial Hama (DuckDB-WASM ST_Buffer R=50m)
+    if (!map.getSource("pest-quarantine")) {
+      map.addSource("pest-quarantine", {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: [],
+        },
+      });
+    }
+
+    if (!map.getLayer("pest-quarantine-fill")) {
+      map.addLayer({
+        id: "pest-quarantine-fill",
+        type: "fill",
+        source: "pest-quarantine",
+        paint: {
+          "fill-color": "#ef4444",
+          "fill-opacity": 0.28,
+        },
+      });
+    }
+
+    if (!map.getLayer("pest-quarantine-line")) {
+      map.addLayer({
+        id: "pest-quarantine-line",
+        type: "line",
+        source: "pest-quarantine",
+        paint: {
+          "line-color": "#dc2626",
+          "line-width": 2,
+          "line-dasharray": [3, 2],
+        },
+      });
+    }
+
+    // Titik Lapang Pengamatan OPT
+    if (!map.getSource("pest-scouting-points")) {
+      map.addSource("pest-scouting-points", {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: [],
+        },
+      });
+    }
+
+    if (!map.getLayer("pest-scouting-circles")) {
+      map.addLayer({
+        id: "pest-scouting-circles",
+        type: "circle",
+        source: "pest-scouting-points",
+        paint: {
+          "circle-radius": 7,
+          "circle-color": [
+            "match",
+            ["get", "severity"],
+            "berat",
+            "#dc2626",
+            "sedang",
+            "#f59e0b",
+            "#10b981",
+          ],
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#ffffff",
+        },
+      });
+    }
+  };
+
+  // 5. Initialize Mapbox GL Map (Single Mount)
+  useEffect(() => {
+    if (!mapContainer.current) return;
+
+    applyMapboxToken(mapboxgl);
+
+    const map = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: getMapStyle("satellite") as any,
+      center: [111.0636, -8.0843],
+      zoom: 14,
+    });
+
+    map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "top-right");
+    map.addControl(new mapboxgl.FullscreenControl(), "top-right");
+
+    // Fallback otomatis ke OpenStreetMap jika citra satelit Esri gagal memuat / timeout
+    let hasFallbackTriggered = false;
+    map.on("error", (e: any) => {
+      if (hasFallbackTriggered) return;
+      const msg = (e?.error?.message || "").toLowerCase();
+      if (
+        msg.includes("arcgisonline") ||
+        msg.includes("world_imagery") ||
+        e?.sourceId === "esri-world-imagery" ||
+        msg.includes("failed to fetch")
+      ) {
+        console.warn("Tile citra satelit Esri tidak dapat dijangkau, mengalihkan ke fallback OpenStreetMap...");
+        hasFallbackTriggered = true;
+        map.setStyle(getMapStyle("streets") as any);
+      }
+    });
+
+    const onMapReady = () => {
+      if (!mapRef.current) return;
+      requestAnimationFrame(() => {
+        try { mapRef.current?.resize(); } catch {}
+      });
+      initMapLayers(map);
+      setIsMapLoaded(true);
+    };
+
+    if (map.isStyleLoaded()) {
+      onMapReady();
+    } else {
+      map.once("idle", onMapReady);
+    }
+
+    map.on("load", () => {
+      if (!isMapLoaded && map.isStyleLoaded()) {
+        onMapReady();
+      }
 
       // Click event on plot polygon
       map.on("click", "estate-plots-fill", (e) => {
@@ -246,12 +384,14 @@ export default function PetaLahanPage() {
         const coordinates = e.lngLat;
 
         const plotId = Number(props.id);
-        const matched = plots.find((p) => p.id === plotId);
+        const matched = plotsRef.current.find((p) => p.id === plotId);
         if (matched) {
           setSelectedPlot(matched);
         }
 
-        map.setFilter("estate-plots-highlight", ["==", "id", plotId]);
+        if (map.getLayer("estate-plots-highlight")) {
+          map.setFilter("estate-plots-highlight", ["==", "id", plotId]);
+        }
 
         if (popupRef.current) {
           popupRef.current.remove();
@@ -283,19 +423,19 @@ export default function PetaLahanPage() {
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-500">Varietas:</span>
-                <span class="font-medium text-slate-800">${props.variety_name || "-"}</span>
+                <span class="font-medium text-slate-800">${props.variety_name && props.variety_name !== "-" ? props.variety_name : "Belum Ditanami"}</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-500">Luas:</span>
-                <span class="font-bold text-emerald-700">${props.area_hectares} ha</span>
+                <span class="font-bold text-emerald-700">${Number(props.area_hectares).toFixed(2)} ha</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-500">Usia Tanam:</span>
-                <span class="font-bold text-slate-800">${props.current_hst} HST</span>
+                <span class="font-bold text-slate-800">${props.current_hst > 0 ? `${props.current_hst} HST` : "0 HST (Lahan Terbuka)"}</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-500">Fase:</span>
-                <span class="font-medium text-slate-800">${props.current_phase || "Vegetatif"}</span>
+                <span class="font-semibold text-slate-800">${props.current_phase || "Bera / Belum Ditanami (Lahan Terbuka)"}</span>
               </div>
               <div class="flex justify-between items-center pt-1 border-t border-slate-100">
                 <span class="text-slate-500 font-semibold">NDVI Observasi:</span>
@@ -321,96 +461,261 @@ export default function PetaLahanPage() {
       map.on("mouseleave", "estate-plots-fill", () => {
         map.getCanvas().style.cursor = "";
       });
+
+      // Click event on pest scouting circle
+      map.on("click", "pest-scouting-circles", (e) => {
+        if (!e.features || e.features.length === 0) return;
+        const feature = e.features[0];
+        const props = feature.properties as any;
+        const coords = (feature.geometry as any).coordinates;
+
+        const isSevere = props.severity === "berat";
+        const badgeColor = isSevere
+          ? "bg-red-50 text-red-800 border-red-200"
+          : props.severity === "sedang"
+          ? "bg-amber-50 text-amber-800 border-amber-200"
+          : "bg-emerald-50 text-emerald-800 border-emerald-200";
+
+        new mapboxgl.Popup({ offset: 12, closeButton: true })
+          .setLngLat(coords)
+          .setHTML(`
+            <div class="p-2.5 font-sans min-w-[210px]">
+              <div class="flex items-center justify-between gap-2 border-b border-slate-100 pb-1.5 mb-1.5">
+                <span class="font-bold text-xs text-slate-900">${(props.pest_type || "").toUpperCase().replace(/_/g, " ")}</span>
+                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${badgeColor}">
+                  ${(props.severity || "").toUpperCase()}
+                </span>
+              </div>
+              <div class="text-[11px] text-slate-600 space-y-1">
+                ${isSevere ? '<div class="text-red-700 font-semibold text-[11px]">Zona Karantina 50m Aktif (DuckDB-WASM)</div>' : ""}
+                <div><span class="text-slate-400">Tindakan:</span> ${props.action_taken || "-"}</div>
+              </div>
+            </div>
+          `)
+          .addTo(map);
+      });
+
+      map.on("mouseenter", "pest-scouting-circles", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "pest-scouting-circles", () => {
+        map.getCanvas().style.cursor = "";
+      });
     });
 
     mapRef.current = map;
 
+    const handleWindowResize = () => {
+      map.resize();
+    };
+    window.addEventListener("resize", handleWindowResize);
+
+    // ResizeObserver: auto-resize canvas whenever the container element changes size
+    // This fixes the blank/tiled canvas when the sidebar panel is toggled open/closed
+    const ro = new ResizeObserver(() => {
+      requestAnimationFrame(() => {
+        try { mapRef.current?.resize(); } catch {}
+      });
+    });
+    if (mapContainer.current) {
+      ro.observe(mapContainer.current);
+    }
+
     return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", handleWindowResize);
       map.remove();
       mapRef.current = null;
     };
-  }, [plots]);
+  }, []);
+
+  // Trigger map resize whenever sidebar visibility changes
+  useEffect(() => {
+    if (!mapRef.current) return;
+    requestAnimationFrame(() => {
+      try { mapRef.current?.resize(); } catch {}
+    });
+  }, [showSidebar]);
+
 
   // 6. Update Map Polygons Data & Colors Real-time when Slider Moves or Filter Changes
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !isMapLoaded) return;
 
-    const source = map.getSource("estate-plots") as mapboxgl.GeoJSONSource;
-    if (!source) return;
-
-    const filtered = plots.filter((p) => {
-      if (cropFilter !== "semua" && p.crop_type !== cropFilter) return false;
-      if (searchQuery.trim() && !p.name.toLowerCase().includes(searchQuery.toLowerCase())) {
-        return false;
-      }
-      return true;
-    });
-
-    const currentDate = timelineDates[activeDateIndex] || "";
-    const currentNdvis = timelineData[currentDate] || {};
-
-    const features: any[] = filtered
-      .filter((p) => p.polygon && p.polygon.coordinates)
-      .map((p) => {
-        // Ambil nilai NDVI pada tanggal aktif saat ini
-        const ndviVal = currentNdvis[p.id] ?? currentNdvis[String(p.id)] ?? null;
-        const ndviColor = getNdviColor(ndviVal);
-        const cropColor = p.crop_type === "padi" ? "#10b981" : "#f59e0b";
-        const fillColor = isNdviMode ? ndviColor : cropColor;
-
-        return {
-          type: "Feature",
-          id: p.id,
-          geometry: p.polygon,
-          properties: {
-            id: p.id,
-            name: p.name,
-            crop_type: p.crop_type,
-            area_hectares: p.area_hectares,
-            current_hst: p.current_hst,
-            current_phase: p.current_phase,
-            variety_name: p.variety_name,
-            division_name: p.division_name,
-            estate_name: p.estate_name,
-            planting_date: p.planting_date,
-            ndvi_val: ndviVal,
-            fill_color: fillColor,
-          },
-        };
+    const buildFeatures = () => {
+      const filtered = plots.filter((p) => {
+        if (cropFilter !== "semua" && p.crop_type !== cropFilter) return false;
+        if (searchQuery.trim() && !p.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+          return false;
+        }
+        return true;
       });
 
-    source.setData({
-      type: "FeatureCollection",
-      features,
-    });
+      const currentDate = timelineDates[activeDateIndex] || "";
+      const currentNdvis = timelineData[currentDate] || {};
 
-    // Fit bounds pada render awal
-    if (features.length > 0 && !isPlayingTimeline) {
-      const bounds = new mapboxgl.LngLatBounds();
-      features.forEach((f) => {
-        const ring = f.geometry.coordinates[0];
-        if (ring) {
-          ring.forEach((coord: [number, number]) => {
-            bounds.extend(coord);
+      return filtered
+        .filter((p) => p.polygon && p.polygon.coordinates)
+        .map((p) => {
+          // Ambil nilai NDVI pada tanggal aktif saat ini
+          const ndviVal = currentNdvis[p.id] ?? currentNdvis[String(p.id)] ?? null;
+          const ndviColor = getNdviColor(ndviVal);
+          const cropColor = p.crop_type === "padi" ? "#10b981" : "#f59e0b";
+          const fillColor = isNdviMode ? ndviColor : cropColor;
+
+          return {
+            type: "Feature" as const,
+            id: p.id,
+            geometry: p.polygon,
+            properties: {
+              id: p.id,
+              name: p.name,
+              crop_type: p.crop_type,
+              area_hectares: p.area_hectares,
+              current_hst: p.current_hst,
+              current_phase:
+                p.current_phase ||
+                (p.current_hst === 0 ? "Bera / Belum Ditanami (Lahan Terbuka)" : "-"),
+              variety_name: p.variety_name,
+              division_name: p.division_name,
+              estate_name: p.estate_name,
+              planting_date: p.planting_date,
+              ndvi_val: ndviVal,
+              fill_color: fillColor,
+            },
+          };
+        });
+    };
+
+    const pushToMap = () => {
+      const source = map.getSource("estate-plots") as mapboxgl.GeoJSONSource;
+      if (!source) return;
+
+      const features = buildFeatures();
+      source.setData({
+        type: "FeatureCollection",
+        features,
+      });
+
+      // Fit bounds otomatis ke 24 koordinat WGS84 petak Bengkok 1 saat layer/source poligon siap
+      if (!hasFittedBoundsRef.current) {
+        const bounds = new mapboxgl.LngLatBounds();
+        if (features.length > 0) {
+          features.forEach((f: any) => {
+            const ring = f.geometry?.coordinates?.[0];
+            if (ring) {
+              ring.forEach((coord: [number, number]) => {
+                bounds.extend(coord);
+              });
+            }
           });
         }
-      });
-      // Hanya lakukan fit bounds jika belum pernah di-fit untuk mencegah map melompat saat play
-      if (!map.isMoving()) {
-        map.fitBounds(bounds, { padding: 90, maxZoom: 16 });
+        if (bounds.isEmpty()) {
+          BENGKOK_1_COORDINATES.forEach((coord) => bounds.extend(coord));
+        }
+        if (!bounds.isEmpty()) {
+          map.fitBounds(bounds, { padding: 80, maxZoom: 18, duration: 800 });
+          hasFittedBoundsRef.current = true;
+        }
       }
+    };
+
+    // Jika style belum siap, tunggu 'idle' sebelum push data polygon
+    if (!map.isStyleLoaded()) {
+      map.once("idle", pushToMap);
+    } else {
+      pushToMap();
     }
   }, [
     plots,
+    activeDateIndex,
+    isNdviMode,
     cropFilter,
     searchQuery,
     selectedEstateId,
-    activeDateIndex,
     timelineDates,
     timelineData,
-    isNdviMode,
+    isMapLoaded,
+    mapStyleEpoch,
   ]);
+
+  // 6b. OPS-06: Fetch Pest Scouting Reports & Generate DuckDB-WASM Quarantine Buffer
+  const fetchScoutingAndBuffer = async () => {
+    try {
+      const pid = selectedPlot ? selectedPlot.id : (plotsRef.current[0]?.id || 1);
+      const rawReports = await operationsApi.getPestScoutingReports(pid);
+      const reports = Array.isArray(rawReports) ? rawReports : [];
+      setScoutingReports(reports);
+
+      // Generate 50m quarantine buffer using DuckDB-WASM Spatial Engine
+      const bufferGeo = await generatePestQuarantineBuffer(
+        reports.map((r) => ({
+          id: r.id,
+          lat: r.latitude,
+          lng: r.longitude,
+          severity: r.severity,
+          pest_type: r.pest_type,
+        })),
+        50
+      );
+      setQuarantineBufferGeoJSON(bufferGeo);
+    } catch (err) {
+      console.warn("Gagal memuat buffer karantina DuckDB-WASM:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchScoutingAndBuffer();
+  }, [selectedPlot, plots]);
+
+  // Push Quarantine Buffer & Scouting Points to Mapbox GL
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const pushQuarantine = () => {
+      const qSource = map.getSource("pest-quarantine") as mapboxgl.GeoJSONSource;
+      if (qSource) {
+        qSource.setData(
+          showQuarantineOverlay && quarantineBufferGeoJSON
+            ? (quarantineBufferGeoJSON as any)
+            : { type: "FeatureCollection", features: [] }
+        );
+      }
+
+      const pSource = map.getSource("pest-scouting-points") as mapboxgl.GeoJSONSource;
+      if (pSource) {
+        const pts = showQuarantineOverlay && Array.isArray(scoutingReports)
+          ? scoutingReports.map((r) => ({
+              type: "Feature" as const,
+              id: r.id,
+              geometry: {
+                type: "Point" as const,
+                coordinates: [r.longitude, r.latitude],
+              },
+              properties: {
+                id: r.id,
+                pest_type: r.pest_type,
+                severity: r.severity,
+                action_taken: r.action_taken || "-",
+                observation_date: r.observation_date,
+              },
+            }))
+          : [];
+        pSource.setData({
+          type: "FeatureCollection",
+          features: pts,
+        });
+      }
+    };
+
+    if (!map.isStyleLoaded()) {
+      map.once("idle", pushQuarantine);
+    } else {
+      pushQuarantine();
+    }
+  }, [quarantineBufferGeoJSON, scoutingReports, showQuarantineOverlay, mapStyleEpoch, isMapLoaded]);
 
   // 7. Handle Satellite Raster Tile Overlay (Add / Remove layer)
   useEffect(() => {
@@ -445,7 +750,7 @@ export default function PetaLahanPage() {
         setSatelliteTileInfo(res.data);
 
         const currentMap = mapRef.current;
-        if (!currentMap) return;
+        if (!currentMap || !currentMap.isStyleLoaded()) return;
 
         if (currentMap.getLayer(layerId)) currentMap.removeLayer(layerId);
         if (currentMap.getSource(sourceId)) currentMap.removeSource(sourceId);
@@ -487,6 +792,8 @@ export default function PetaLahanPage() {
     selectedEstateId,
     activeDateIndex,
     timelineDates,
+    mapStyleEpoch,
+    isMapLoaded,
   ]);
 
   // 8. Update Opacity satelit secara dinamis
@@ -504,25 +811,111 @@ export default function PetaLahanPage() {
     const map = mapRef.current;
     if (!map) return;
 
-    map.setFilter("estate-plots-highlight", ["==", "id", plot.id]);
+    if (map.getLayer("estate-plots-highlight")) {
+      map.setFilter("estate-plots-highlight", ["==", "id", plot.id]);
+    }
 
     if (plot.polygon && plot.polygon.coordinates && plot.polygon.coordinates[0]) {
       const ring = plot.polygon.coordinates[0];
       const bounds = new mapboxgl.LngLatBounds();
       ring.forEach((c: any) => bounds.extend(c));
       map.fitBounds(bounds, { padding: 120, maxZoom: 17 });
+
+      const center = bounds.getCenter();
+      if (popupRef.current) popupRef.current.remove();
+
+      const cropLabel = plot.crop_type === "padi" ? "Padi (Oryza)" : "Jagung (Zea Mays)";
+      const cropColor =
+        plot.crop_type === "padi"
+          ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+          : "text-amber-800 bg-amber-50 border-amber-200";
+
+      const popupHtml = `
+        <div class="p-3 min-w-[250px] font-sans">
+          <div class="flex items-center justify-between gap-2 border-b border-slate-100 pb-2 mb-2">
+            <h3 class="font-bold text-slate-900 text-sm leading-tight">${plot.name}</h3>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${cropColor}">
+              ${plot.crop_type?.toUpperCase()}
+            </span>
+          </div>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <div class="flex justify-between">
+              <span class="text-slate-500">Komoditas:</span>
+              <span class="font-semibold text-slate-800">${cropLabel}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-500">Varietas:</span>
+              <span class="font-medium text-slate-800">${plot.variety_name || "Belum Ditanami"}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-500">Luas:</span>
+              <span class="font-bold text-emerald-700">${Number(plot.area_hectares).toFixed(2)} ha</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-500">Usia Tanam:</span>
+              <span class="font-bold text-slate-800">${plot.current_hst > 0 ? `${plot.current_hst} HST` : "0 HST (Lahan Terbuka)"}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-500">Fase:</span>
+              <span class="font-semibold text-slate-800">${plot.current_phase || "Bera / Belum Ditanami (Lahan Terbuka)"}</span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      popupRef.current = new mapboxgl.Popup({ offset: 15, closeButton: true })
+        .setLngLat(center)
+        .setHTML(popupHtml)
+        .addTo(map);
     }
   };
 
   // Toggle Map Base Style
   const toggleMapStyle = (style: "satellite" | "streets") => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || style === mapStyleType) return;
     setMapStyleType(style);
-    const styleUrl =
-      style === "satellite"
-        ? "mapbox://styles/mapbox/satellite-streets-v12"
-        : "mapbox://styles/mapbox/outdoors-v12";
-    mapRef.current.setStyle(styleUrl);
+    const map = mapRef.current;
+    map.setStyle(getMapStyle(style) as any);
+    map.once("style.load", () => {
+      initMapLayers(map);
+
+      // Push current polygon data immediately after layers are registered,
+      // without waiting for React state update cycle (mapStyleEpoch / isMapLoaded no-op)
+      const pushAfterIdle = () => {
+        const source = map.getSource("estate-plots") as mapboxgl.GeoJSONSource;
+        if (!source || !plotsRef.current.length) return;
+
+        const currentPlots = plotsRef.current.filter(
+          (p) => p.polygon && p.polygon.coordinates
+        );
+        const features = currentPlots.map((p) => ({
+          type: "Feature" as const,
+          id: p.id,
+          geometry: p.polygon,
+          properties: {
+            id: p.id,
+            name: p.name,
+            crop_type: p.crop_type,
+            area_hectares: p.area_hectares,
+            current_hst: p.current_hst,
+            current_phase: p.current_phase || (p.current_hst === 0 ? "Bera / Belum Ditanami (Lahan Terbuka)" : "-"),
+            variety_name: p.variety_name,
+            division_name: p.division_name,
+            estate_name: p.estate_name,
+            planting_date: p.planting_date,
+            ndvi_val: null,
+            fill_color: p.crop_type === "padi" ? "#10b981" : "#f59e0b",
+          },
+        }));
+        source.setData({ type: "FeatureCollection", features });
+      };
+
+      // Use 'idle' to wait until new base tiles have been fetched before pushing
+      map.once("idle", pushAfterIdle);
+
+      setIsMapLoaded(true);
+      setMapStyleEpoch((prev) => prev + 1);
+    });
   };
 
   // Hitung rata-rata NDVI pada tanggal observasi yang sedang aktif
@@ -547,150 +940,190 @@ export default function PetaLahanPage() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="h-screen w-full overflow-hidden bg-[var(--canvas)] pt-[68px] flex flex-col">
       <Navbar />
 
-      {/* Main Container */}
-      <main className="flex-1 flex flex-col overflow-hidden relative">
-        {/* Top Control Bar */}
-        <div className="bg-white border-b border-slate-200 px-4 py-3 sm:px-6 shadow-sm z-20 flex flex-wrap items-center justify-between gap-3">
-          {/* Left: Estate Switcher & Filter */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-emerald-600" />
-              <label className="text-xs font-semibold text-slate-700">Estate:</label>
-              <select
-                value={selectedEstateId}
-                onChange={(e) => setSelectedEstateId(Number(e.target.value) || "")}
-                disabled={loadingEstates || estates.length === 0}
-                className="text-xs font-medium rounded-lg border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 bg-slate-50 py-1.5 pl-2.5 pr-8"
-              >
-                {loadingEstates ? (
-                  <option>Memuat estate...</option>
-                ) : (
-                  estates.map((est) => (
-                    <option key={est.id} value={est.id}>
-                      {est.name} ({est.province || "Indonesia"})
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
+      {/* Ambient Command Bar */}
+      <div className="h-[34px] border-b border-black/[0.08] px-[21px] flex items-center justify-between text-xs shrink-0 bg-[var(--surface)]">
+        <div className="flex items-center gap-1.5 text-[var(--ink-3)] font-mono">
+          <span className="text-[var(--ink-2)] font-medium">
+            {estates.find((e) => e.id === Number(selectedEstateId))?.name || "Kebun Pacitan"}
+          </span>
+          <span>/</span>
+          <span className="text-[var(--ink)] font-semibold">
+            {selectedPlot ? selectedPlot.name : "Bengkok 1"}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowQuarantineOverlay(!showQuarantineOverlay)}
+            className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-[3px] text-[11px] font-mono border transition-colors ${
+              showQuarantineOverlay
+                ? "bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
+                : "bg-white text-[var(--ink-muted)] border-black/[0.08] hover:bg-black/[0.02]"
+            }`}
+            title="Tampilkan / Sembunyikan Buffer Karantina OPT 50m DuckDB-WASM"
+          >
+            <span className={`size-1.5 rounded-full ${showQuarantineOverlay ? "bg-red-500 animate-pulse" : "bg-neutral-400"}`} />
+            <span>DuckDB Buffer (50m)</span>
+          </button>
 
-            {/* Crop Type Filter Tabs */}
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-              <button
-                type="button"
-                onClick={() => setCropFilter("semua")}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                  cropFilter === "semua"
-                    ? "bg-white text-slate-900 font-bold shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                Semua ({plots.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setCropFilter("padi")}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
-                  cropFilter === "padi"
-                    ? "bg-emerald-600 text-white font-bold shadow-xs"
-                    : "text-slate-600 hover:text-emerald-700"
-                }`}
-              >
-                <Sprout className="w-3.5 h-3.5" />
-                <span>Padi</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCropFilter("jagung")}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
-                  cropFilter === "jagung"
-                    ? "bg-amber-600 text-white font-bold shadow-xs"
-                    : "text-slate-600 hover:text-amber-800"
-                }`}
-              >
-                <Wheat className="w-3.5 h-3.5" />
-                <span>Jagung</span>
-              </button>
-            </div>
+          <button
+            onClick={() => setShowScoutingModal(true)}
+            className="flex items-center gap-1 px-2 py-0.5 rounded-[3px] text-[11px] font-mono bg-white border border-black/[0.08] text-[var(--ink)] hover:bg-black/[0.03] transition-colors"
+            title="Input laporan pengamatan hama lapang"
+          >
+            <Bug className="w-3 h-3 text-red-600" />
+            <span>+ Laporkan OPT</span>
+          </button>
+
+          <div className="flex items-center text-xs font-mono text-[var(--ink-2)]">
+            <span className="size-2 rounded-full bg-emerald-500 inline-block animate-pulse mr-1.5" />
+            <span>Sentinel-2 Live</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Top Control Bar (reduced to h-[44px], flat border-b border-black/[0.08] bg-[var(--surface)]) */}
+      <div className="h-[44px] border-b border-black/[0.08] px-[21px] flex items-center justify-between shrink-0 bg-[var(--surface)] text-xs z-20">
+        {/* Left: Estate Switcher & Crop Filter */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-3.5 h-3.5 text-[var(--accent)]" />
+            <span className="label-telemetry">Kebun:</span>
+            <select
+              value={selectedEstateId}
+              onChange={(e) => setSelectedEstateId(Number(e.target.value) || "")}
+              disabled={loadingEstates || estates.length === 0}
+              className="text-xs font-medium rounded-[3px] border border-black/[0.08] bg-[var(--field)] py-1 pl-2 pr-7 focus:outline-none focus:border-[var(--accent)] text-[var(--ink)]"
+            >
+              {loadingEstates ? (
+                <option>Memuat kebun...</option>
+              ) : (
+                estates.map((est) => (
+                  <option key={est.id} value={est.id}>
+                    {est.name} ({est.province || "Indonesia"})
+                  </option>
+                ))
+              )}
+            </select>
           </div>
 
-          {/* Right: Actions */}
-          <div className="flex items-center gap-2">
-            {/* Style switcher */}
-            <div className="hidden sm:flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-              <button
-                type="button"
-                onClick={() => toggleMapStyle("satellite")}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
-                  mapStyleType === "satellite"
-                    ? "bg-emerald-700 text-white font-semibold shadow-xs"
-                    : "text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                Satelit
-              </button>
-              <button
-                type="button"
-                onClick={() => toggleMapStyle("streets")}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
-                  mapStyleType === "streets"
-                    ? "bg-emerald-700 text-white font-semibold shadow-xs"
-                    : "text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                Peta
-              </button>
-            </div>
+          <div className="h-4 w-px bg-black/[0.08]" />
 
-            {/* Tambah Petak Baru Button */}
-            <Link
-              href="/admin/petak-baru"
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
+          {/* Crop Type Filter Tabs */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setCropFilter("semua")}
+              className={`px-2.5 py-1 text-xs rounded-[3px] transition-colors ${
+                cropFilter === "semua"
+                  ? "bg-[var(--ink)] text-white font-medium"
+                  : "text-[var(--ink-2)] hover:bg-black/[0.04]"
+              }`}
             >
-              <PlusCircle className="w-4 h-4" />
-              <span>Tambah Petak Baru</span>
-            </Link>
+              Semua ({plots.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setCropFilter("padi")}
+              className={`px-2.5 py-1 text-xs rounded-[3px] flex items-center gap-1 transition-colors ${
+                cropFilter === "padi"
+                  ? "bg-emerald-600 text-white font-medium"
+                  : "text-[var(--ink-2)] hover:bg-black/[0.04]"
+              }`}
+            >
+              <Sprout className="w-3 h-3" />
+              <span>Padi</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCropFilter("jagung")}
+              className={`px-2.5 py-1 text-xs rounded-[3px] flex items-center gap-1 transition-colors ${
+                cropFilter === "jagung"
+                  ? "bg-amber-600 text-white font-medium"
+                  : "text-[var(--ink-2)] hover:bg-black/[0.04]"
+              }`}
+            >
+              <Wheat className="w-3 h-3" />
+              <span>Jagung</span>
+            </button>
           </div>
         </div>
 
-        {/* Map Workspace */}
-        <div className="flex-1 flex relative overflow-hidden h-[calc(100vh-120px)]">
-          {/* Map Container */}
-          <div ref={mapContainer} className="flex-1 w-full h-full bg-slate-900" />
+        {/* Right: Map Style switcher & Tambah Petak */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center border border-black/[0.08] rounded-[3px] overflow-hidden p-0.5 bg-[var(--field)]">
+            <button
+              type="button"
+              onClick={() => toggleMapStyle("satellite")}
+              className={`px-2 py-0.5 text-xs rounded-[2px] transition-colors ${
+                mapStyleType === "satellite"
+                  ? "bg-[var(--surface)] font-medium text-[var(--ink)]"
+                  : "text-[var(--ink-3)] hover:text-[var(--ink)]"
+              }`}
+            >
+              Satelit
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleMapStyle("streets")}
+              className={`px-2 py-0.5 text-xs rounded-[2px] transition-colors ${
+                mapStyleType === "streets"
+                  ? "bg-[var(--surface)] font-medium text-[var(--ink)]"
+                  : "text-[var(--ink-3)] hover:text-[var(--ink)]"
+              }`}
+            >
+              Peta
+            </button>
+          </div>
 
-          {/* Floating Top Summary Stats Card */}
+          <Link
+            href="/admin/petak-baru"
+            className="inline-flex items-center gap-1 px-3 py-1 bg-[var(--accent)] hover:bg-emerald-700 text-white rounded-[3px] text-xs font-medium transition-colors"
+          >
+            <PlusCircle className="w-3.5 h-3.5" />
+            <span>Petak Baru</span>
+          </Link>
+        </div>
+      </div>
+
+      {/* Main Workspace Grid (flex-1 grid grid-cols-[1fr_480px] overflow-hidden) */}
+      <div className="flex-1 grid grid-cols-[1fr_480px] overflow-hidden relative">
+        {/* Left: Map canvas (relative w-full h-full overflow-hidden, zero margins, zero rounded outer wrapper) */}
+        <div className="relative w-full h-full overflow-hidden">
+          <div
+            ref={mapContainer}
+            className="absolute inset-0 w-full h-full bg-slate-900"
+            style={{ width: "100%", height: "100%" }}
+          />
+
+          {/* Floating Top Summary Stats Micro-HUD */}
           {summary && (
-            <div className="absolute top-4 left-4 z-10 hidden md:flex items-center gap-3 bg-white/95 backdrop-blur-md px-4 py-2 rounded-xl shadow-lg border border-slate-200/80 text-xs">
-              <div className="border-r border-slate-200 pr-3">
-                <span className="text-slate-400 block text-[10px] font-bold uppercase">Total Lahan</span>
-                <span className="font-extrabold text-slate-800 text-sm">
-                  {summary.total_plots} Petak <span className="text-slate-400 font-normal">({summary.total_area_hectares} ha)</span>
+            <div className="absolute top-[21px] left-[21px] z-10 hidden md:flex items-center gap-4 backdrop-blur-[14px] bg-white/85 border border-black/[0.08] rounded-[3px] p-[8px_16px] text-xs">
+              <div className="border-r border-black/[0.08] pr-3">
+                <span className="label-telemetry block">Total Lahan</span>
+                <span className="font-semibold text-[var(--ink)] tabular-nums">
+                  {summary.total_plots} Petak <span className="text-[var(--ink-3)] font-normal">({summary.total_area_hectares} ha)</span>
                 </span>
               </div>
-              <div className="border-r border-slate-200 pr-3">
-                <span className="text-emerald-700 block text-[10px] font-bold uppercase flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" /> Padi
-                </span>
-                <span className="font-bold text-slate-800">
-                  {summary.padi_plots} petak <span className="text-slate-500">({summary.padi_area_hectares} ha)</span>
+              <div className="border-r border-black/[0.08] pr-3">
+                <span className="label-telemetry block">Padi</span>
+                <span className="font-semibold text-emerald-700 tabular-nums">
+                  {summary.padi_plots} petak <span className="text-[var(--ink-3)] font-normal">({summary.padi_area_hectares} ha)</span>
                 </span>
               </div>
               <div>
-                <span className="text-amber-800 block text-[10px] font-bold uppercase flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-amber-500" /> Jagung
-                </span>
-                <span className="font-bold text-slate-800">
-                  {summary.jagung_plots} petak <span className="text-slate-500">({summary.jagung_area_hectares} ha)</span>
+                <span className="label-telemetry block">Jagung</span>
+                <span className="font-semibold text-amber-700 tabular-nums">
+                  {summary.jagung_plots} petak <span className="text-[var(--ink-3)] font-normal">({summary.jagung_area_hectares} ha)</span>
                 </span>
               </div>
             </div>
           )}
 
-          {/* Kontrol Overlay Citra Satelit (Pojok Kanan Atas) */}
-          <div className="absolute top-4 right-14 z-10 w-64 max-w-[calc(100vw-80px)]">
+          {/* Kontrol Overlay Citra Satelit */}
+          <div className="absolute top-[21px] right-[21px] z-10 w-64 max-w-[calc(100vw-80px)]">
             <SatelliteOverlayControl
               isEnabled={showSatelliteOverlay}
               onToggleEnabled={setShowSatelliteOverlay}
@@ -703,48 +1136,48 @@ export default function PetaLahanPage() {
             />
           </div>
 
-          {/* Map Legend (Keterangan Warna Dinamis: NDVI Spektrum vs Komoditas) */}
-          <div className="absolute bottom-28 left-4 z-10 bg-white/95 backdrop-blur-md px-3.5 py-2.5 rounded-xl shadow-md border border-slate-200 text-xs space-y-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
-              {isNdviMode ? "Legenda Status NDVI" : "Legenda Tanaman"}
+          {/* NDVI legend: floating Micro-HUD absolute bottom-[21px] left-[34px] backdrop-blur-[14px] bg-white/85 border border-black/[0.08] rounded-[3px] p-[13px_21px] z-10 */}
+          <div className="absolute bottom-[21px] left-[34px] backdrop-blur-[14px] bg-white/85 border border-black/[0.08] rounded-[3px] p-[13px_21px] z-10 text-xs space-y-2">
+            <span className="label-telemetry block">
+              {isNdviMode ? "LEGENDA STATUS NDVI" : "LEGENDA TANAMAN"}
             </span>
 
             {isNdviMode ? (
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 text-slate-700">
-                  <span className="w-3.5 h-3.5 rounded bg-emerald-700 border border-emerald-800" />
-                  <span className="font-medium">Sangat Baik (&gt; 0.75)</span>
+              <div className="space-y-1.5 font-mono text-[11px]">
+                <div className="flex items-center gap-2 text-[var(--ink-2)]">
+                  <span className="w-3 h-3 rounded-[2px] bg-emerald-700 border border-emerald-800" />
+                  <span>Sangat Baik (&gt; 0.75)</span>
                 </div>
-                <div className="flex items-center gap-2 text-slate-700">
-                  <span className="w-3.5 h-3.5 rounded bg-emerald-500 border border-emerald-600" />
-                  <span className="font-medium">Baik (0.55 - 0.75)</span>
+                <div className="flex items-center gap-2 text-[var(--ink-2)]">
+                  <span className="w-3 h-3 rounded-[2px] bg-emerald-500 border border-emerald-600" />
+                  <span>Baik (0.55 - 0.75)</span>
                 </div>
-                <div className="flex items-center gap-2 text-slate-700">
-                  <span className="w-3.5 h-3.5 rounded bg-amber-500 border border-amber-600" />
-                  <span className="font-medium">Waspada (0.30 - 0.55)</span>
+                <div className="flex items-center gap-2 text-[var(--ink-2)]">
+                  <span className="w-3 h-3 rounded-[2px] bg-amber-500 border border-amber-600" />
+                  <span>Waspada (0.30 - 0.55)</span>
                 </div>
-                <div className="flex items-center gap-2 text-slate-700">
-                  <span className="w-3.5 h-3.5 rounded bg-rose-500 border border-rose-600" />
-                  <span className="font-medium">Kritis (&lt; 0.30)</span>
+                <div className="flex items-center gap-2 text-[var(--ink-2)]">
+                  <span className="w-3 h-3 rounded-[2px] bg-stone-400 border border-stone-500" />
+                  <span>Bera / Terbuka (&lt; 0.30)</span>
                 </div>
               </div>
             ) : (
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 text-slate-700">
-                  <span className="w-3.5 h-3.5 rounded bg-emerald-500 border border-emerald-700" />
-                  <span className="font-medium">Padi (Oryza Sativa)</span>
+              <div className="space-y-1.5 text-[11px]">
+                <div className="flex items-center gap-2 text-[var(--ink-2)]">
+                  <span className="w-3 h-3 rounded-[2px] bg-emerald-500 border border-emerald-700" />
+                  <span>Padi (Oryza Sativa)</span>
                 </div>
-                <div className="flex items-center gap-2 text-slate-700">
-                  <span className="w-3.5 h-3.5 rounded bg-amber-500 border border-amber-700" />
-                  <span className="font-medium">Jagung (Zea Mays)</span>
+                <div className="flex items-center gap-2 text-[var(--ink-2)]">
+                  <span className="w-3 h-3 rounded-[2px] bg-amber-500 border border-amber-700" />
+                  <span>Jagung (Zea Mays)</span>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Timeline Slider Temporal di Bawah Peta */}
+          {/* Timeline slider: positioned neatly as floating bar above bottom canvas */}
           {timelineDates.length > 0 && (
-            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 w-[94%] sm:w-auto flex justify-center">
+            <div className="absolute bottom-[21px] left-1/2 -translate-x-1/2 z-20 w-[92%] max-w-xl flex justify-center">
               <TimelineSlider
                 dates={timelineDates}
                 currentIndex={activeDateIndex}
@@ -760,50 +1193,93 @@ export default function PetaLahanPage() {
               />
             </div>
           )}
+        </div>
 
-          {/* Collapsible Sidebar: Daftar Petak */}
-          <div
-            className={`absolute top-0 right-0 h-full w-80 bg-white/95 backdrop-blur-md border-l border-slate-200 z-10 flex flex-col shadow-xl transition-transform duration-300 ${
-              showSidebar ? "translate-x-0" : "translate-x-full"
-            }`}
-          >
-            {/* Sidebar Header */}
-            <div className="p-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-emerald-600" />
-                <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
-                  Daftar Petak ({filteredPlots.length})
-                </h2>
+        {/* Right: Telemetry Rail (w-[480px] border-l border-black/[0.08] bg-[var(--canvas)] overflow-y-auto p-[21px] flex flex-col gap-[34px]) */}
+        <div className="w-[480px] border-l border-black/[0.08] bg-[var(--canvas)] overflow-y-auto p-[21px] flex flex-col gap-[34px]">
+          {/* Selected Plot Telemetry (if active) */}
+          {selectedPlot && (
+            <div className="p-4 rounded-[3px] border border-black/[0.08] bg-[var(--surface)] space-y-3">
+              <div className="flex items-start justify-between gap-2 border-b border-black/[0.08] pb-2">
+                <div>
+                  <span className="label-telemetry">PETAK AKTIF</span>
+                  <h3 className="text-sm font-bold text-[var(--ink)]">{selectedPlot.name}</h3>
+                </div>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-[2px] border ${
+                    selectedPlot.crop_type === "padi"
+                      ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                      : "text-amber-800 bg-amber-50 border-amber-200"
+                  }`}
+                >
+                  {selectedPlot.crop_type.toUpperCase()}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="label-telemetry block">Varietas</span>
+                  <span className="font-semibold text-[var(--ink)]">
+                    {selectedPlot.variety_name || "Belum Ditanami"}
+                  </span>
+                </div>
+                <div>
+                  <span className="label-telemetry block">Luas</span>
+                  <span className="font-semibold text-emerald-700 tabular-nums">
+                    {Number(selectedPlot.area_hectares).toFixed(2)} ha
+                  </span>
+                </div>
+                <div>
+                  <span className="label-telemetry block">Usia Tanam</span>
+                  <span className="font-semibold text-[var(--ink)] tabular-nums">
+                    {selectedPlot.current_hst > 0 ? `${selectedPlot.current_hst} HST` : "0 HST (Lahan Terbuka)"}
+                  </span>
+                </div>
+                <div>
+                  <span className="label-telemetry block">Fase</span>
+                  <span className="font-semibold text-[var(--ink)] truncate block">
+                    {selectedPlot.current_phase || "Bera / Terbuka"}
+                  </span>
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => setShowSidebar(false)}
-                className="p-1 hover:bg-slate-200 rounded text-slate-500"
-                title="Sembunyikan panel"
+                onClick={() => setSatelliteModalPlot(selectedPlot)}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-[3px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold border border-emerald-200 transition-colors"
               >
-                <X className="w-4 h-4" />
+                <Radio className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Analisis Citra Satelit & SAR</span>
               </button>
+            </div>
+          )}
+
+          {/* DAFTAR PETAK Section */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-[var(--accent)]" />
+                <h2 className="label-telemetry font-bold">
+                  DAFTAR PETAK ({filteredPlots.length})
+                </h2>
+              </div>
             </div>
 
             {/* Search Input */}
-            <div className="p-3 border-b border-slate-100">
-              <input
-                type="text"
-                placeholder="Cari petak lahan..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full text-xs rounded-lg border-slate-200 bg-white shadow-xs focus:border-emerald-500 focus:ring-emerald-500"
-              />
-            </div>
+            <input
+              type="text"
+              placeholder="Cari petak atau varietas..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full text-xs rounded-[3px] border border-black/[0.08] bg-[var(--surface)] p-2.5 text-[var(--ink)] placeholder:text-[var(--ink-3)] focus:outline-none focus:border-[var(--accent)]"
+            />
 
-            {/* Plot List Items */}
-            <div className="flex-1 overflow-y-auto divide-y divide-slate-100 p-2 space-y-1">
+            {/* Plot List */}
+            <div className="flex flex-col gap-2">
               {loadingPlots ? (
-                <div className="p-8 text-center text-xs text-slate-500">
+                <div className="p-8 text-center text-xs text-[var(--ink-3)] font-mono">
                   Memuat data petak lahan...
                 </div>
               ) : filteredPlots.length === 0 ? (
-                <div className="p-8 text-center text-xs text-slate-500">
+                <div className="p-8 text-center text-xs text-[var(--ink-3)] font-mono">
                   Belum ada petak lahan yang sesuai.
                 </div>
               ) : (
@@ -820,18 +1296,18 @@ export default function PetaLahanPage() {
                     <div
                       key={plot.id}
                       onClick={() => handleSelectPlot(plot)}
-                      className={`p-3 rounded-lg cursor-pointer transition-all ${
+                      className={`p-3 rounded-[3px] cursor-pointer transition-colors border ${
                         isSelected
-                          ? "bg-emerald-50 border border-emerald-300 shadow-xs"
-                          : "hover:bg-slate-50 border border-transparent"
+                          ? "bg-[var(--surface)] border-[var(--accent)] ring-1 ring-[var(--accent)]/30"
+                          : "bg-[var(--surface)] border-black/[0.08] hover:border-black/[0.16]"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-1 mb-1">
-                        <h4 className="font-semibold text-slate-900 text-xs truncate">
+                        <h4 className="font-semibold text-[var(--ink)] text-xs truncate">
                           {plot.name}
                         </h4>
                         <span
-                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded-[2px] ${
                             isPadi
                               ? "bg-emerald-100 text-emerald-800"
                               : "bg-amber-100 text-amber-900"
@@ -840,68 +1316,82 @@ export default function PetaLahanPage() {
                           {plot.crop_type.toUpperCase()}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-[11px] text-slate-500">
-                        <span>{plot.variety_name || "Varietas N/A"}</span>
-                        <span className="font-bold text-emerald-700">{plot.area_hectares} ha</span>
+                      <div className="flex items-center justify-between text-[11px] text-[var(--ink-2)]">
+                        <span>{plot.variety_name && plot.variety_name !== "-" ? plot.variety_name : "Belum Ditanami"}</span>
+                        <span className="font-bold text-emerald-700 tabular-nums">{Number(plot.area_hectares).toFixed(2)} ha</span>
                       </div>
-                      <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
-                        <span>{plot.current_phase || "Fase Vegetatif"}</span>
-                        <span className="font-medium text-slate-700">{plot.current_hst} HST</span>
+                      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1 text-[10px]">
+                        <span className="text-[var(--ink-3)]">
+                          {plot.current_hst === 0 || !plot.current_phase || plot.current_phase.toLowerCase().includes("bera")
+                            ? "Bera / Lahan Terbuka"
+                            : plot.current_phase}
+                        </span>
+                        <span className="font-mono text-[var(--ink-2)] tabular-nums">
+                          {plot.current_hst > 0 ? `${plot.current_hst} HST` : "0 HST"}
+                        </span>
                       </div>
 
                       {/* Observasi NDVI pada slider aktif */}
                       {plotNdvi !== null && plotNdvi !== undefined && (
-                        <div className="mt-1.5 flex items-center justify-between text-[10px] px-2 py-0.5 bg-slate-50 rounded border border-slate-200">
-                          <span className="text-slate-500">NDVI Saat Ini:</span>
-                          <span className="font-bold text-emerald-700">{plotNdvi.toFixed(3)}</span>
+                        <div className="mt-2 flex items-center justify-between text-[10px] px-2 py-1 bg-[var(--field)] rounded-[2px] border border-black/[0.06] font-mono">
+                          <span className="text-[var(--ink-3)]">NDVI Observasi:</span>
+                          <span className="font-bold text-emerald-700 tabular-nums">{plotNdvi.toFixed(4)}</span>
                         </div>
                       )}
 
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSatelliteModalPlot(plot);
-                        }}
-                        className="mt-2 w-full flex items-center justify-center gap-1.5 py-1 px-2 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[10px] font-semibold border border-emerald-200 transition-colors"
-                      >
-                        <Radio className="w-3 h-3 text-emerald-600" />
-                        <span>Indeks Satelit & SAR</span>
-                      </button>
+                      <div className="mt-2.5 pt-2 border-t border-black/[0.06] flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSatelliteModalPlot(plot);
+                          }}
+                          className="flex-1 flex items-center justify-center gap-1 py-1 px-2 rounded-[2px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[10px] font-semibold border border-emerald-200 transition-colors"
+                        >
+                          <Radio className="w-3 h-3 text-emerald-600" />
+                          <span>Satelit & SAR</span>
+                        </button>
+                        <Link
+                          href={`/petak/${plot.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="py-1 px-2 rounded-[2px] bg-black/[0.04] hover:bg-black/[0.08] text-[var(--ink-2)] text-[10px] font-medium transition-colors"
+                        >
+                          Detail &rarr;
+                        </Link>
+                      </div>
                     </div>
                   );
                 })
               )}
             </div>
           </div>
-
-          {/* Re-open Sidebar Button when closed */}
-          {!showSidebar && (
-            <button
-              type="button"
-              onClick={() => setShowSidebar(true)}
-              className="absolute top-4 right-4 z-10 p-2.5 bg-white rounded-lg shadow-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <MapPin className="w-4 h-4 text-emerald-600" />
-              <span>Lihat Daftar Petak</span>
-            </button>
-          )}
-
-          {/* Modal Indeks Satelit & SAR */}
-          {satelliteModalPlot && (
-            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
-              <div className="w-full max-w-2xl max-h-[90vh]">
-                <PlotSatellitePanel
-                  plotId={satelliteModalPlot.id}
-                  plotName={satelliteModalPlot.name}
-                  cropType={satelliteModalPlot.crop_type}
-                  onClose={() => setSatelliteModalPlot(null)}
-                />
-              </div>
-            </div>
-          )}
         </div>
-      </main>
+
+        {/* Modal Indeks Satelit & SAR */}
+        {satelliteModalPlot && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
+            <div className="w-full max-w-2xl max-h-[90vh]">
+              <PlotSatellitePanel
+                plotId={satelliteModalPlot.id}
+                plotName={satelliteModalPlot.name}
+                cropType={satelliteModalPlot.crop_type}
+                onClose={() => setSatelliteModalPlot(null)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Modal Pengamatan OPT & Karantina (OPS-06) */}
+        <PestScoutingModal
+          isOpen={showScoutingModal}
+          onClose={() => setShowScoutingModal(false)}
+          plotId={selectedPlot ? selectedPlot.id : (plotsRef.current[0]?.id || 1)}
+          plotName={selectedPlot ? selectedPlot.name : (plotsRef.current[0]?.name || "Pacitan Bengkok 1")}
+          onSuccess={() => {
+            fetchScoutingAndBuffer();
+          }}
+        />
+      </div>
     </div>
   );
 }

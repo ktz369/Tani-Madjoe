@@ -8,6 +8,7 @@ from __future__ import annotations
 import io
 import json
 import math
+import re
 import xml.etree.ElementTree as ET
 import zipfile
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -16,6 +17,89 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 class SpatialParseError(ValueError):
     """Exception raised when spatial file parsing or validation fails."""
     pass
+
+
+MAX_KMZ_UNCOMPRESSED_BYTES = 50 * 1024 * 1024  # 50 MB
+MAX_KMZ_FILE_COUNT = 500
+MAX_KMZ_COMPRESSION_RATIO = 100.0
+
+
+def _check_xml_safety(xml_bytes: bytes) -> None:
+    """Guard against XML External Entity (XXE) injection and billion-laughs entity expansion."""
+    lower_bytes = xml_bytes.lower()
+    if b"<!entity" in lower_bytes or (b"system" in lower_bytes and b"<!doctype" in lower_bytes):
+        raise SpatialParseError("Entitas XML eksternal (XXE) atau deklarasi DOCTYPE kustom tidak diizinkan demi keamanan.")
+
+
+def _check_kmz_safety(zf: zipfile.ZipFile) -> None:
+    """Validate KMZ archive against zip bomb vulnerabilities, high compression ratios, and resource exhaustion."""
+    infolist = zf.infolist()
+    if len(infolist) > MAX_KMZ_FILE_COUNT:
+        raise SpatialParseError(
+            f"Arsip KMZ memuat terlalu banyak berkas ({len(infolist)} > {MAX_KMZ_FILE_COUNT})."
+        )
+
+    total_uncompressed = 0
+    for info in infolist:
+        total_uncompressed += info.file_size
+        if total_uncompressed > MAX_KMZ_UNCOMPRESSED_BYTES:
+            raise SpatialParseError(
+                f"Ukuran dekompresi arsip KMZ melebihi batas aman ({MAX_KMZ_UNCOMPRESSED_BYTES // (1024 * 1024)} MB). Terdeteksi potensi zip bomb."
+            )
+        # Check compression ratio for entries with uncompressed size > 1MB
+        if info.file_size > 1024 * 1024 and info.compress_size > 0:
+            ratio = info.file_size / info.compress_size
+            if ratio > MAX_KMZ_COMPRESSION_RATIO:
+                raise SpatialParseError(
+                    f"Berkas '{info.filename}' memiliki rasio kompresi mencurigakan ({ratio:.1f}x). Terdeteksi potensi zip bomb."
+                )
+
+
+def check_ring_self_intersection(ring: List[List[float]]) -> Optional[str]:
+    """Check if a closed polygon ring self-intersects (crosses itself) or self-touches.
+
+    Returns an error message describing the violation, or None if the ring is simple.
+    """
+    n = len(ring)
+    if n < 4:
+        return None
+
+    # Check for duplicate internal vertices (excluding first == last)
+    pts_without_closing = ring[:-1]
+    seen_vertices = set()
+    for idx, pt in enumerate(pts_without_closing):
+        key = (round(pt[0], 7), round(pt[1], 7))
+        if key in seen_vertices:
+            return f"Cincin poligon bersinggungan sendiri pada titik sudut ({pt[0]}, {pt[1]}) (titik ke-{idx + 1})."
+        seen_vertices.add(key)
+
+    def ccw(p1: List[float], p2: List[float], p3: List[float]) -> float:
+        return (p2[0] - p1[0]) * (p3[1] - p1[1]) - (p2[1] - p1[1]) * (p3[0] - p1[0])
+
+    def segments_intersect(p1: List[float], p2: List[float], p3: List[float], p4: List[float]) -> bool:
+        d1 = ccw(p3, p4, p1)
+        d2 = ccw(p3, p4, p2)
+        d3 = ccw(p1, p2, p3)
+        d4 = ccw(p1, p2, p4)
+
+        # Strict intersection (cross each other)
+        if ((d1 > 1e-11 and d2 < -1e-11) or (d1 < -1e-11 and d2 > 1e-11)) and \
+           ((d3 > 1e-11 and d4 < -1e-11) or (d3 < -1e-11 and d4 > 1e-11)):
+            return True
+        return False
+
+    num_segments = n - 1
+    for i in range(num_segments):
+        p1, p2 = ring[i], ring[i + 1]
+        for j in range(i + 1, num_segments):
+            # Skip adjacent segments sharing a vertex
+            if j == i + 1 or (i == 0 and j == num_segments - 1):
+                continue
+            p3, p4 = ring[j], ring[j + 1]
+            if segments_intersect(p1, p2, p3, p4):
+                return f"Cincin poligon berpotongan sendiri (self-intersecting) antara sisi {i + 1} dan sisi {j + 1}."
+
+    return None
 
 
 def _strip_tag_namespace(tag: str) -> str:
@@ -34,7 +118,9 @@ def _parse_coordinates_text(coord_text: str) -> List[List[float]]:
     if not coord_text or not coord_text.strip():
         raise SpatialParseError("Elemen <coordinates> kosong atau tidak memuat data titik koordinat.")
 
-    raw_tokens = coord_text.strip().split()
+    # Normalize whitespace around commas (e.g. '105.0, -5.0' -> '105.0,-5.0')
+    normalized_text = re.sub(r'\s*,\s*', ',', coord_text.strip())
+    raw_tokens = normalized_text.split()
     points: List[List[float]] = []
 
     for token in raw_tokens:
@@ -173,9 +259,15 @@ def validate_and_normalize_polygon(
             lng, lat = float(pt[0]), float(pt[1])
 
             if not (-180.0 <= lng <= 180.0 and -90.0 <= lat <= 90.0):
-                errors.append(
-                    f"Koordinat ({lng}, {lat}) di luar batas WGS84 valid (-180..180 lon, -90..90 lat)."
-                )
+                if abs(lat) > 90.0 and abs(lng) <= 90.0:
+                    errors.append(
+                        f"Koordinat ({lng}, {lat}) di luar batas WGS84 valid (-180..180 lon, -90..90 lat). "
+                        f"Terdeteksi urutan koordinat terbalik: latitude ({lat}) melebihi ±90°, kemungkinan format adalah [lat, lng] bukannya [lng, lat]."
+                    )
+                else:
+                    errors.append(
+                        f"Koordinat ({lng}, {lat}) di luar batas WGS84 valid (-180..180 lon, -90..90 lat)."
+                    )
             clean_ring.append([round(lng, 7), round(lat, 7)])
 
         if not clean_ring:
@@ -190,6 +282,11 @@ def validate_and_normalize_polygon(
         if clean_ring[0] != clean_ring[-1]:
             clean_ring.append(clean_ring[0])
             warnings.append(f"Cincin ke-{ring_idx + 1} tidak tertutup, ditutup otomatis dengan menyambung ke titik awal.")
+
+        # Check for self-intersection (figure-8 / bowtie / self-tangency)
+        self_intersect_err = check_ring_self_intersection(clean_ring)
+        if self_intersect_err:
+            errors.append(f"Cincin ke-{ring_idx + 1}: {self_intersect_err}")
 
         ring_area = calculate_spherical_polygon_area(clean_ring)
         if ring_idx == 0:
@@ -250,6 +347,8 @@ def parse_kml_content(
 
     if not xml_bytes or not xml_bytes.strip():
         raise SpatialParseError("Berkas KML kosong atau tidak memuat data.")
+
+    _check_xml_safety(xml_bytes)
 
     try:
         root = ET.fromstring(xml_bytes)
@@ -336,12 +435,17 @@ def parse_kmz_content(kmz_bytes: bytes, default_name: str = "Petak Baru") -> Dic
 
     try:
         with zipfile.ZipFile(io.BytesIO(kmz_bytes), "r") as zf:
+            _check_kmz_safety(zf)
             namelist = zf.namelist()
             kml_files = [n for n in namelist if n.lower().endswith(".kml")]
             if not kml_files:
                 raise SpatialParseError("Arsip KMZ tidak memuat berkas .kml di dalamnya.")
 
-            chosen = "doc.kml" if "doc.kml" in kml_files else kml_files[0]
+            doc_candidates = [
+                n for n in kml_files
+                if n.lower() == "doc.kml" or n.lower().endswith("/doc.kml") or n.lower().endswith("\\doc.kml")
+            ]
+            chosen = doc_candidates[0] if doc_candidates else kml_files[0]
             kml_bytes = zf.read(chosen)
             res = parse_kml_content(kml_bytes, default_name=default_name)
             res["format"] = "KMZ"
@@ -476,6 +580,8 @@ def _extract_plots_from_kml(
 
     if not xml_bytes or not xml_bytes.strip():
         raise SpatialParseError("Berkas KML kosong atau tidak memuat data.")
+
+    _check_xml_safety(xml_bytes)
 
     try:
         root = ET.fromstring(xml_bytes)
@@ -766,6 +872,7 @@ def parse_multi_kmz_content(
 
     try:
         with zipfile.ZipFile(io.BytesIO(kmz_bytes), "r") as zf:
+            _check_kmz_safety(zf)
             namelist = zf.namelist()
             kml_files = [n for n in namelist if n.lower().endswith(".kml")]
             if not kml_files:

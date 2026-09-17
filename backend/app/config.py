@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Tani - SaaS Monitoring Pertanian"
+    PROJECT_NAME: str = "TANDUR - SaaS Monitoring Pertanian"
     VERSION: str = "0.1.0"
     API_V1_PREFIX: str = "/api"
     ENVIRONMENT: str = "development"

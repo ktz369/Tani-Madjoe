@@ -6,6 +6,7 @@ NDWI, SAVI, BSI, SAR backscatter) for agricultural plots.
 """
 
 from datetime import date, timedelta
+import hashlib
 import logging
 import math
 from typing import Any, Dict, List, Optional
@@ -138,6 +139,7 @@ def generate_historical_spectral_data(
     reference_date: Optional[date] = None,
     days_back: int = 30,
     cadence_days: int = 5,
+    include_today: bool = False,
 ) -> List[Dict[str, Any]]:
     """Generate realistic historical satellite observation time points for an agricultural plot.
 
@@ -148,6 +150,7 @@ def generate_historical_spectral_data(
         reference_date: End date of backfill window (defaults to today).
         days_back: Lookback span in days (default 30).
         cadence_days: Step interval between observations (default 5).
+        include_today: Whether observation offsets include T-0 (ending at today) or end at T-5.
 
     Returns:
         List of observation dictionaries ordered chronologically ascending.
@@ -162,8 +165,13 @@ def generate_historical_spectral_data(
 
     num_observations = days_back // cadence_days
     # Offsets in descending order so subtracting from reference_date yields chronological ascending order
-    # e.g., for days_back=30, cadence=5: offsets = [30, 25, 20, 15, 10, 5]
-    offsets = [i * cadence_days for i in range(num_observations, 0, -1)]
+    # e.g., for days_back=30, cadence=5:
+    # include_today=False -> offsets = [30, 25, 20, 15, 10, 5] (T-30 to T-5)
+    # include_today=True  -> offsets = [25, 20, 15, 10, 5, 0] (T-25 to T-0)
+    if include_today:
+        offsets = [i * cadence_days for i in range(num_observations - 1, -1, -1)]
+    else:
+        offsets = [i * cadence_days for i in range(num_observations, 0, -1)]
 
     observations: List[Dict[str, Any]] = []
 
@@ -179,6 +187,15 @@ def generate_historical_spectral_data(
             hst = (obs_date - simulated_planting_date).days
 
         ndvi = _calculate_phenology_ndvi(crop_type, hst)
+
+        # Deterministic hash-based micro-noise (per plot_id + observation_date)
+        # Bounded to subtle variations (±0.004) to maintain realistic field variability
+        # while preserving smooth, monotonic vegetative growth curve without erratic drops.
+        seed_str = f"plot-{plot_id}-{obs_date.isoformat()}-backfill"
+        hash_val = int(hashlib.md5(seed_str.encode("utf-8")).hexdigest()[:8], 16)
+        noise = ((hash_val % 1000) / 1000.0 - 0.5) * 0.008
+
+        ndvi = round(max(0.0, min(1.0, ndvi + noise)), 4)
 
         # Scale factor normalized to [0, 1] relative to typical min (0.20) and max (0.85) NDVI
         f = max(0.0, min(1.0, (ndvi - 0.20) / 0.65))
@@ -215,6 +232,7 @@ async def backfill_satellite_indices_for_plot(
     plot_id: int,
     days_back: int = 30,
     cadence_days: int = 5,
+    include_today: bool = False,
 ) -> List[SpectralIndex]:
     """Fetch plot by ID, generate historical spectral observations, and persist to database.
 
@@ -227,6 +245,7 @@ async def backfill_satellite_indices_for_plot(
         plot_id: ID of the agricultural plot to backfill.
         days_back: Historical window length in days (default 30).
         cadence_days: Interval between observations in days (default 5).
+        include_today: Whether observation offsets include T-0 (ending at today) or end at T-5.
 
     Returns:
         List of created SpectralIndex instances.
@@ -245,6 +264,7 @@ async def backfill_satellite_indices_for_plot(
         reference_date=date.today(),
         days_back=days_back,
         cadence_days=cadence_days,
+        include_today=include_today,
     )
 
     if not raw_data:
@@ -311,3 +331,54 @@ async def backfill_satellite_indices_for_plot(
 
     await db.commit()
     return created_records
+
+
+async def batch_backfill_satellite_indices(
+    db: AsyncSession,
+    plot_ids: List[int],
+    days_back: int = 30,
+    cadence_days: int = 5,
+    include_today: bool = False,
+) -> Dict[str, Any]:
+    """Execute historical satellite backfill across multiple plot IDs in batch.
+
+    Processes plots sequentially within a database session to prevent concurrent session race conditions,
+    handling nonexistent plots gracefully.
+
+    Parameters:
+        db: Async database session.
+        plot_ids: List of plot IDs to backfill.
+        days_back: Historical window length in days (default 30).
+        cadence_days: Interval between observations in days (default 5).
+        include_today: Whether observation offsets include T-0 or end at T-5.
+
+    Returns:
+        Dict summarizing processing status, plot counts, and total records saved.
+    """
+    total_plots = len(plot_ids)
+    processed_count = 0
+    records_saved = 0
+    errors: List[str] = []
+
+    for pid in plot_ids:
+        try:
+            records = await backfill_satellite_indices_for_plot(
+                db=db,
+                plot_id=pid,
+                days_back=days_back,
+                cadence_days=cadence_days,
+                include_today=include_today,
+            )
+            processed_count += 1
+            records_saved += len(records)
+        except Exception as exc:
+            errors.append(f"Plot {pid}: {str(exc)}")
+
+    return {
+        "status": "success" if not errors else "partial_success",
+        "plots_processed": processed_count,
+        "total_plots": total_plots,
+        "records_created": records_saved,
+        "errors": errors,
+    }
+

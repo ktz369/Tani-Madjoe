@@ -17,6 +17,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 # Mock modules that depend on database drivers not installed in test environment
 class DummyCol:
+    def __init__(self, *args, **kwargs): pass
+    def __call__(self, *args, **kwargs): return self
     def __ge__(self, other): return True
     def __le__(self, other): return True
     def __gt__(self, other): return True
@@ -26,9 +28,19 @@ class DummyCol:
     def in_(self, other): return True
     def desc(self): return self
     def asc(self): return self
+    def is_(self, other): return True
+    def isnot(self, other): return True
+    def is_not(self, other): return True
     def __getattr__(self, name): return DummyCol()
 
-class DummyModel:
+class DummyMeta(type):
+    def __getattr__(cls, name):
+        return DummyCol()
+
+class DummyModel(metaclass=DummyMeta):
+    def __init__(self, *args, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
     def __getattr__(self, name):
         return DummyCol()
 
@@ -46,11 +58,15 @@ for mod in [
     "app.models.planting_season", "app.models.generated_report",
     "app.models.alert", "app.models.phenology_phase",
 ]:
-    m = MagicMock()
-    # Provide dummy model classes
-    for cls_name in ["Estate", "Division", "Plot", "CropVariety", "SpectralIndex", "WeatherData", "GddAccumulation", "PlantingSeason", "GeneratedReport", "Alert", "PhenologyPhase"]:
-        setattr(m, cls_name, DummyModel())
-    sys.modules[mod] = m
+    if mod not in sys.modules:
+        m = MagicMock()
+        for cls_name in ["Estate", "Division", "Plot", "CropVariety", "SpectralIndex", "WeatherData", "GddAccumulation", "PlantingSeason", "GeneratedReport", "Alert", "PhenologyPhase"]:
+            setattr(m, cls_name, DummyModel)
+        sys.modules[mod] = m
+    else:
+        for cls_name in ["Estate", "Division", "Plot", "CropVariety", "SpectralIndex", "WeatherData", "GddAccumulation", "PlantingSeason", "GeneratedReport", "Alert", "PhenologyPhase"]:
+            if not hasattr(sys.modules[mod], cls_name):
+                setattr(sys.modules[mod], cls_name, DummyModel)
 
 from app.services.report_service import (
     export_timeseries_csv,

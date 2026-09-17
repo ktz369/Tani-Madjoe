@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React from "react";
 import { Layers, UploadCloud } from "lucide-react";
@@ -42,7 +42,7 @@ export function ModeSegmentedControl({
     <div
       role="tablist"
       aria-label="Mode Pendaftaran Petak"
-      className={`relative inline-grid grid-cols-2 p-[3px] bg-[#f4f4f5] rounded-full border border-black/[0.04] shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)] select-none ${className}`.trim()}
+      className={`relative inline-grid grid-cols-2 p-[2px] bg-[var(--field)] rounded-[3px] border border-black/[0.08] select-none ${className}`.trim()}
     >
       {items.map((item) => {
         const Icon = item.icon;
@@ -57,10 +57,10 @@ export function ModeSegmentedControl({
             tabIndex={isActive ? 0 : -1}
             onClick={() => onChange(item.id)}
             onKeyDown={(e) => handleKeyDown(e, item.id)}
-            className={`relative z-10 flex items-center justify-center gap-2 py-1.5 px-3.5 rounded-full text-[13px] font-medium tracking-tight transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#059669]/30 ${
+            className={`relative z-10 flex items-center justify-center gap-2 py-1 px-3 rounded-[2px] text-[12.5px] font-medium tracking-tight transition-colors outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] ${
               isActive
-                ? "bg-white text-[#09090b] shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]"
-                : "text-[#71717a] hover:text-[#09090b]"
+                ? "bg-white text-[var(--ink)] border border-black/[0.08]"
+                : "text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--hover)]"
             }`}
           >
             <Icon className="w-4 h-4 shrink-0 transition-colors" />

@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from html import escape as html_escape
 import logging
 import smtplib
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
@@ -186,9 +187,16 @@ def render_daily_alert_email_html(alerts: List[Any], recipient_name: Optional[st
         if isinstance(item["created_at"], datetime):
             created_str = item["created_at"].strftime("%d %b %Y, %H:%M WIB")
 
+        escaped_plot_name = html_escape(str(item.get("plot_name") or "Petak Lahan"))
+        escaped_estate_name = html_escape(str(item.get("estate_name") or "Kebun Operasional"))
+        escaped_title = html_escape(str(item.get("title") or "Peringatan Anomali"))
+        raw_desc = item.get("description") or ""
+        escaped_desc = html_escape(str(raw_desc))
+        escaped_recommendation = html_escape(str(item.get("recommendation") or ""))
+
         desc_html = (
-            f'<div style="font-size: 12px; color: #4B5563; margin-bottom: 6px; line-height: 1.4;">{item["description"]}</div>'
-            if item["description"]
+            f'<div style="font-size: 12px; color: #4B5563; margin-bottom: 6px; line-height: 1.4;">{escaped_desc}</div>'
+            if raw_desc
             else ""
         )
 
@@ -204,22 +212,23 @@ def render_daily_alert_email_html(alerts: List[Any], recipient_name: Optional[st
             <div style="margin-bottom: 6px;">
               <span style="{badge_style}">{cfg['icon']} {cfg['label']}</span>
               <span style="font-size: 12px; color: #6B7280; margin-left: 8px; font-weight: 500;">
-                🌾 <strong>{item['plot_name']}</strong> &bull; {item['estate_name']}
+                🌾 <strong>{escaped_plot_name}</strong> &bull; {escaped_estate_name}
               </span>
               {time_span}
             </div>
             <div style="font-size: 14px; font-weight: 700; color: #111827; margin-bottom: 4px; line-height: 1.4;">
-              {item['title']}
+              {escaped_title}
             </div>
             {desc_html}
             <div style="background-color: #F8FAFC; border-left: 3px solid #10B981; padding: 8px 12px; border-radius: 0 4px 4px 0; font-size: 12px; color: #1E293B; line-height: 1.5;">
-              <strong style="color: #059669;">💡 Rekomendasi Aksi:</strong> {item['recommendation']}
+              <strong style="color: #059669;">💡 Rekomendasi Aksi:</strong> {escaped_recommendation}
             </div>
           </td>
         </tr>
         """
 
-    greeting_text = f"Halo <strong>{recipient_name}</strong>," if recipient_name else "Halo Tim Operasional Kebun,"
+    escaped_recipient = html_escape(str(recipient_name)) if recipient_name else ""
+    greeting_text = f"Halo <strong>{escaped_recipient}</strong>," if escaped_recipient else "Halo Tim Operasional Kebun,"
 
     html = f"""<!DOCTYPE html>
 <html lang="id">
@@ -479,6 +488,11 @@ def send_daily_alert_summary(user_email: str, alerts: List[Any]) -> bool:
     """
     if not alerts:
         logger.info("Tidak ada alert untuk dikirimkan ke %s.", user_email)
+        return False
+
+    # Validasi keamanan: Mencegah email header injection via karakter baris baru
+    if not user_email or "\r" in user_email or "\n" in user_email:
+        logger.warning("Potensi email header injection atau format email tidak valid: %r", user_email)
         return False
 
     date_str = format_indonesian_date()

@@ -1,22 +1,95 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Check,
-  CheckCircle2,
-  ChevronRight,
   Clock,
   Droplets,
   Flame,
-  Info,
   Layers,
-  Sparkles,
   Sprout,
 } from "lucide-react";
 import { PhaseProgressItem } from "@/types";
 
+/**
+ * Standar 7 Fase Pertumbuhan Padi Berbasis Growing Degree Days (GDD)
+ * Sesuai Dokumen Spesifikasi Teknis Tani §2.3.B:
+ * 1. Vegetatif Awal: 0 <= sum(GDD) < 350
+ * 2. Vegetatif Aktif: 350 <= sum(GDD) < 650
+ * 3. Inisiasi Malai: 650 <= sum(GDD) < 850
+ * 4. Bunting (Booting): 850 <= sum(GDD) < 1050
+ * 5. Berbunga (Heading): 1050 <= sum(GDD) < 1250
+ * 6. Pengisian Bulir: 1250 <= sum(GDD) < 1600
+ * 7. Masak Fisiologis: sum(GDD) >= 1600
+ */
+export const RICE_7_GROWTH_STAGES: PhaseProgressItem[] = [
+  {
+    phase_code: "VEG-1",
+    phase_name: "Vegetatif Awal",
+    hst_start: 0,
+    hst_end: 20,
+    gdd_target: 350,
+    kc_value: 1.05,
+    status: "upcoming",
+  },
+  {
+    phase_code: "VEG-2",
+    phase_name: "Vegetatif Aktif",
+    hst_start: 21,
+    hst_end: 40,
+    gdd_target: 650,
+    kc_value: 1.15,
+    status: "upcoming",
+  },
+  {
+    phase_code: "INI-M",
+    phase_name: "Inisiasi Malai",
+    hst_start: 41,
+    hst_end: 55,
+    gdd_target: 850,
+    kc_value: 1.20,
+    status: "upcoming",
+  },
+  {
+    phase_code: "BOOT",
+    phase_name: "Bunting (Booting)",
+    hst_start: 56,
+    hst_end: 70,
+    gdd_target: 1050,
+    kc_value: 1.25,
+    status: "upcoming",
+  },
+  {
+    phase_code: "HEAD",
+    phase_name: "Berbunga (Heading)",
+    hst_start: 71,
+    hst_end: 85,
+    gdd_target: 1250,
+    kc_value: 1.20,
+    status: "upcoming",
+  },
+  {
+    phase_code: "GRAIN",
+    phase_name: "Pengisian Bulir",
+    hst_start: 86,
+    hst_end: 105,
+    gdd_target: 1600,
+    kc_value: 1.05,
+    status: "upcoming",
+  },
+  {
+    phase_code: "MATUR",
+    phase_name: "Masak Fisiologis",
+    hst_start: 106,
+    hst_end: 120,
+    gdd_target: 1950,
+    kc_value: 0.90,
+    status: "upcoming",
+  },
+];
+
 interface PhenologyTimelineProps {
-  timeline: PhaseProgressItem[];
+  timeline?: PhaseProgressItem[];
   currentHst: number;
   currentPhaseName?: string | null;
   gddCumulative: number;
@@ -28,108 +101,124 @@ export default function PhenologyTimeline({
   currentPhaseName,
   gddCumulative,
 }: PhenologyTimelineProps) {
-  // Find currently active phase index
-  const activeIndex = timeline.findIndex((p) => p.status === "active");
-  const defaultSelected = activeIndex >= 0 ? activeIndex : Math.max(0, timeline.length - 1);
+  // Petakan 7 fase fenologi padi aktual terhadap akumulasi GDD
+  const effectiveTimeline = useMemo(() => {
+    const rawList =
+      Array.isArray(timeline) && timeline.length >= 5 ? timeline : RICE_7_GROWTH_STAGES;
+
+    let foundActive = false;
+    return rawList.map((phase, idx) => {
+      let status: "completed" | "active" | "upcoming" = "upcoming";
+      const isLast = idx === rawList.length - 1;
+
+      if (gddCumulative >= phase.gdd_target && !isLast) {
+        status = "completed";
+      } else if (!foundActive) {
+        status = "active";
+        foundActive = true;
+      } else {
+        status = "upcoming";
+      }
+
+      return {
+        ...phase,
+        status,
+      };
+    });
+  }, [timeline, gddCumulative]);
+
+  // Cari fase aktif saat ini
+  const activeIndex = effectiveTimeline.findIndex((p) => p.status === "active");
+  const defaultSelected = activeIndex >= 0 ? activeIndex : 0;
   const [selectedIndex, setSelectedIndex] = useState<number>(defaultSelected);
 
-  if (!timeline || timeline.length === 0) {
-    return (
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 text-center text-slate-400">
-        <Sprout className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-        <p className="text-sm font-semibold text-slate-600">
-          Belum ada data tahapan fase fenologi.
-        </p>
-        <p className="text-xs text-slate-400 mt-1">
-          Pastikan varietas benih dan siklus tumbuh tanaman sudah terkonfigurasi.
-        </p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    const actIdx = effectiveTimeline.findIndex((p) => p.status === "active");
+    if (actIdx >= 0) {
+      setSelectedIndex(actIdx);
+    }
+  }, [effectiveTimeline]);
 
-  const selectedPhase = timeline[selectedIndex] || timeline[0];
+  const selectedPhase = effectiveTimeline[selectedIndex] || effectiveTimeline[0];
+  const activePhase = effectiveTimeline[activeIndex] || effectiveTimeline[0];
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
+    <div className="border border-black/[0.08] bg-white rounded-[3px] p-[21px] space-y-[21px]">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
-        <div className="flex items-center gap-2">
-          <div className="p-2 rounded-xl bg-emerald-100 text-emerald-700">
-            <Sprout className="w-5 h-5" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-black/[0.08] pb-[13px]">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="label-telemetry">Fase Fenologi & Siklus Tumbuh</span>
           </div>
-          <div>
-            <h3 className="text-base sm:text-lg font-bold text-slate-900">
-              Alur Fase Fenologi & Pertumbuhan Tanaman
-            </h3>
-            <p className="text-xs text-slate-500">
-              Tahapan siklus hidup berdasarkan akumulasi unit termal GDD (°C-hari) & HST
-            </p>
-          </div>
+          <h3 className="text-[15px] font-semibold text-[var(--ink)] tracking-tight mt-0.5">
+            Alur Pertumbuhan Tanaman Terintegrasi
+          </h3>
+          <p className="text-[12px] text-[var(--ink-2)] mt-0.5">
+            Tahapan siklus hidup berdasarkan akumulasi unit termal GDD (°C-hari) & umur tanaman (HST)
+          </p>
         </div>
 
         {/* Badge Fase Aktif */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500 font-medium">Fase Aktif:</span>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
-            <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <span className="label-telemetry">FASE AKTIF:</span>
+          <span className="inline-flex items-center gap-1.5 h-[26px] px-2.5 rounded-[3px] border border-emerald-500/20 bg-emerald-50 text-[var(--accent-ink)] text-[11px] font-mono font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
             {currentPhaseName || "Dalam Pertumbuhan"}
           </span>
         </div>
       </div>
 
       {/* Horizontal Stepper Timeline Container */}
-      <div className="overflow-x-auto pb-4 pt-2 -mx-2 px-2">
+      <div className="overflow-x-auto pb-3 pt-1 -mx-1 px-1">
         <div className="min-w-[640px] flex items-center justify-between relative">
           {/* Connector Line Background */}
-          <div className="absolute top-5 left-6 right-6 h-1 bg-slate-200 -z-0" />
+          <div className="absolute top-4 left-6 right-6 h-[1px] bg-black/[0.08] -z-0" />
 
-          {timeline.map((phase, idx) => {
+          {effectiveTimeline.map((phase, idx) => {
             const isCompleted = phase.status === "completed";
             const isActive = phase.status === "active";
-            const isUpcoming = phase.status === "upcoming";
             const isSelected = selectedIndex === idx;
 
-            // Compute connector line color before this node
             return (
               <div
                 key={phase.phase_code}
                 onClick={() => setSelectedIndex(idx)}
                 className="relative z-10 flex flex-col items-center cursor-pointer group focus:outline-none"
               >
-                {/* Step Circle Node */}
+                {/* Step Node */}
                 <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs transition-all duration-200 shadow-sm ${
+                  className={`w-8 h-8 rounded-[3px] flex items-center justify-center font-mono font-semibold text-[11px] transition-all ${
                     isActive
-                      ? "bg-blue-600 text-white ring-4 ring-blue-100 scale-110 shadow-blue-200"
+                      ? "bg-[var(--accent)] text-white ring-2 ring-[var(--accent)]/20 shadow-none"
                       : isCompleted
-                      ? "bg-emerald-600 text-white ring-2 ring-emerald-100 hover:bg-emerald-700"
-                      : "bg-slate-100 text-slate-500 border border-slate-300 hover:bg-slate-200"
-                  } ${isSelected && !isActive ? "ring-2 ring-slate-400" : ""}`}
+                      ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                      : "bg-white text-[var(--ink-3)] border border-black/[0.12] hover:border-black/[0.24]"
+                  } ${isSelected && !isActive ? "ring-2 ring-black/[0.15]" : ""}`}
                 >
                   {isCompleted ? (
-                    <Check className="w-5 h-5 stroke-[2.5]" />
+                    <Check className="w-4 h-4 stroke-[2.5]" />
                   ) : isActive ? (
-                    <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
+                    <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
                   ) : (
                     <span>{phase.phase_code}</span>
                   )}
                 </div>
 
                 {/* Node Label */}
-                <div className="mt-2.5 text-center max-w-[100px]">
+                <div className="mt-2 text-center max-w-[100px]">
                   <span
-                    className={`block text-xs font-bold leading-tight truncate ${
+                    className={`block text-[11px] font-semibold leading-tight truncate ${
                       isActive
-                        ? "text-blue-700"
+                        ? "text-[var(--accent-ink)]"
                         : isCompleted
-                        ? "text-slate-800"
-                        : "text-slate-400"
+                        ? "text-[var(--ink)]"
+                        : "text-[var(--ink-3)]"
                     }`}
                     title={phase.phase_name}
                   >
                     {phase.phase_code}
                   </span>
-                  <span className="block text-[10px] text-slate-500 mt-0.5">
+                  <span className="block text-[10px] font-mono tabular-nums text-[var(--ink-3)] mt-0.5">
                     {phase.hst_start}-{phase.hst_end} HST
                   </span>
                 </div>
@@ -137,16 +226,16 @@ export default function PhenologyTimeline({
                 {/* Status Indicator Pill */}
                 <div className="mt-1">
                   {isActive ? (
-                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-blue-100 text-blue-800 border border-blue-200 whitespace-nowrap">
+                    <span className="h-[18px] px-1.5 rounded-[3px] text-[9px] font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 inline-block uppercase tracking-wider">
                       Aktif
                     </span>
                   ) : isCompleted ? (
-                    <span className="px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span className="h-[18px] px-1.5 rounded-[3px] text-[9px] font-mono font-medium bg-black/[0.04] text-[var(--ink-2)] border border-black/[0.06] inline-block">
                       Selesai
                     </span>
                   ) : (
-                    <span className="px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-slate-100 text-slate-400">
-                      Akan Datang
+                    <span className="h-[18px] px-1.5 rounded-[3px] text-[9px] font-mono text-[var(--ink-3)] border border-transparent inline-block">
+                      Berikutnya
                     </span>
                   )}
                 </div>
@@ -158,26 +247,26 @@ export default function PhenologyTimeline({
 
       {/* Selected Phase Detail Box */}
       {selectedPhase && (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 sm:p-5 transition-all">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3 mb-3">
+        <div className="border border-black/[0.08] bg-[var(--field)] rounded-[3px] p-[13px] transition-all">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-black/[0.08] pb-2 mb-3">
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-bold text-xs">
+              <span className="h-[22px] px-2 rounded-[3px] bg-[var(--accent)] text-white font-mono font-semibold text-[11px] inline-flex items-center">
                 {selectedPhase.phase_code}
               </span>
-              <h4 className="font-bold text-slate-900 text-sm sm:text-base">
+              <h4 className="font-semibold text-[var(--ink)] text-[13px]">
                 {selectedPhase.phase_name}
               </h4>
             </div>
 
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-slate-500">Status Fase:</span>
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className="label-telemetry">STATUS:</span>
               <span
-                className={`font-semibold capitalize px-2 py-0.5 rounded-md ${
+                className={`font-mono uppercase font-semibold px-1.5 py-0.5 rounded-[3px] text-[10px] border ${
                   selectedPhase.status === "active"
-                    ? "bg-blue-100 text-blue-800 font-bold"
+                    ? "bg-emerald-100 text-emerald-800 border-emerald-300"
                     : selectedPhase.status === "completed"
-                    ? "bg-emerald-100 text-emerald-800"
-                    : "bg-slate-200 text-slate-600"
+                    ? "bg-slate-100 text-slate-700 border-black/[0.08]"
+                    : "bg-white text-slate-500 border-black/[0.08]"
                 }`}
               >
                 {selectedPhase.status === "active"
@@ -190,55 +279,55 @@ export default function PhenologyTimeline({
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            <div className="bg-white p-3 rounded-lg border border-slate-200/70">
-              <span className="text-slate-500 block mb-1 flex items-center gap-1 font-medium">
-                <Clock className="w-3.5 h-3.5 text-slate-400" />
-                Rentang Usia Tanam
+            <div className="bg-white p-3 rounded-[3px] border border-black/[0.08]">
+              <span className="label-telemetry block mb-1 flex items-center gap-1">
+                <Clock className="w-3 h-3 text-[var(--ink-3)]" />
+                Rentang HST
               </span>
-              <span className="font-bold text-slate-800 text-sm">
-                {selectedPhase.hst_start} - {selectedPhase.hst_end} HST
+              <span className="font-mono font-semibold text-[var(--ink)] text-[14px] tabular-nums">
+                {selectedPhase.hst_start} - {selectedPhase.hst_end} <span className="text-[11px] text-[var(--ink-3)]">HST</span>
               </span>
-              <span className="text-[10px] text-slate-400 block mt-0.5">
-                Usia saat ini: {currentHst} HST
+              <span className="text-[10px] font-mono tabular-nums text-[var(--ink-3)] block mt-0.5">
+                HST saat ini: {currentHst}
               </span>
             </div>
 
-            <div className="bg-white p-3 rounded-lg border border-slate-200/70">
-              <span className="text-slate-500 block mb-1 flex items-center gap-1 font-medium">
-                <Flame className="w-3.5 h-3.5 text-amber-500" />
-                Target Thermal GDD
+            <div className="bg-white p-3 rounded-[3px] border border-black/[0.08]">
+              <span className="label-telemetry block mb-1 flex items-center gap-1">
+                <Flame className="w-3 h-3 text-amber-500" />
+                Target GDD
               </span>
-              <span className="font-bold text-slate-800 text-sm">
-                {selectedPhase.gdd_target} °C-hari
+              <span className="font-mono font-semibold text-[var(--ink)] text-[14px] tabular-nums">
+                {selectedPhase.gdd_target} <span className="text-[11px] text-[var(--ink-3)]">°C-hari</span>
               </span>
-              <span className="text-[10px] text-slate-400 block mt-0.5">
+              <span className="text-[10px] font-mono tabular-nums text-[var(--ink-3)] block mt-0.5">
                 Akumulasi: {gddCumulative} °C-hari
               </span>
             </div>
 
-            <div className="bg-white p-3 rounded-lg border border-slate-200/70">
-              <span className="text-slate-500 block mb-1 flex items-center gap-1 font-medium">
-                <Droplets className="w-3.5 h-3.5 text-blue-500" />
+            <div className="bg-white p-3 rounded-[3px] border border-black/[0.08]">
+              <span className="label-telemetry block mb-1 flex items-center gap-1">
+                <Droplets className="w-3 h-3 text-blue-500" />
                 Koefisien Tanaman (Kc)
               </span>
-              <span className="font-bold text-blue-700 text-sm">
+              <span className="font-mono font-semibold text-blue-700 text-[14px] tabular-nums">
                 {selectedPhase.kc_value.toFixed(2)}
               </span>
-              <span className="text-[10px] text-slate-400 block mt-0.5">
+              <span className="text-[10px] text-[var(--ink-3)] block mt-0.5">
                 Pengali ET₀ untuk ETc
               </span>
             </div>
 
-            <div className="bg-white p-3 rounded-lg border border-slate-200/70">
-              <span className="text-slate-500 block mb-1 flex items-center gap-1 font-medium">
-                <Layers className="w-3.5 h-3.5 text-emerald-500" />
-                Kebutuhan Pengelolaan
+            <div className="bg-white p-3 rounded-[3px] border border-black/[0.08]">
+              <span className="label-telemetry block mb-1 flex items-center gap-1">
+                <Layers className="w-3 h-3 text-[var(--accent)]" />
+                Kebutuhan Air
               </span>
-              <span className="font-semibold text-slate-700 text-xs line-clamp-2">
+              <span className="font-medium text-[var(--ink-2)] text-[11px] line-clamp-2 leading-relaxed">
                 {selectedPhase.kc_value >= 1.15
-                  ? "Kebutuhan air tinggi (fase kritis pembungaan)"
+                  ? "Kebutuhan air tinggi (fase kritis)"
                   : selectedPhase.kc_value < 0.8
-                  ? "Kebutuhan air minimal (fase pemasakan/pembibitan)"
+                  ? "Kebutuhan air minimal"
                   : "Kebutuhan air moderat stabil"}
               </span>
             </div>

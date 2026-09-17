@@ -1,20 +1,91 @@
+@font-face {
+  font-family: 'Aspekta';
+  src: url('https://cdn.jsdelivr.net/gh/ivodolenc/aspekta@2.000/fonts/webfonts/Aspekta-300.woff2') format('woff2');
+  font-weight: 300; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Aspekta';
+  src: url('https://cdn.jsdelivr.net/gh/ivodolenc/aspekta@2.000/fonts/webfonts/Aspekta-400.woff2') format('woff2');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Aspekta';
+  src: url('https://cdn.jsdelivr.net/gh/ivodolenc/aspekta@2.000/fonts/webfonts/Aspekta-500.woff2') format('woff2');
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Aspekta';
+  src: url('https://cdn.jsdelivr.net/gh/ivodolenc/aspekta@2.000/fonts/webfonts/Aspekta-600.woff2') format('woff2');
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Aspekta';
+  src: url('https://cdn.jsdelivr.net/gh/ivodolenc/aspekta@2.000/fonts/webfonts/Aspekta-700.woff2') format('woff2');
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 15, 23, 42;
-  --background-start-rgb: 248, 250, 252;
-  --background-end-rgb: 255, 255, 255;
+  /* Fibonacci Spatial Scale */
+  --space-3: 3px;
+  --space-5: 5px;
+  --space-8: 8px;
+  --space-13: 13px;
+  --space-21: 21px;
+  --space-34: 34px;
+  --space-55: 55px;
+  --space-89: 89px;
+  --space-144: 144px;
+  --space-233: 233px;
+  --split-major: 61.8%;
+  --split-minor: 38.2%;
+
+  /* Surfaces */
+  --canvas:     #FAFAF9;
+  --surface:    #FFFFFF;
+  --surface-hud: rgba(255, 255, 255, 0.85);
+  --field:      #F4F4F3;
+  --inset:      #F0EFED;
+  --hover:      rgba(0, 0, 0, 0.04);
+  --hover-2:    rgba(0, 0, 0, 0.06);
+
+  /* Ink (text) */
+  --ink:        #0F172A;
+  --ink-2:      #475569;
+  --ink-3:      #94A3B8;
+
+  /* Lines / Borders */
+  --line:       rgba(0, 0, 0, 0.08);
+  --line-strong: rgba(0, 0, 0, 0.16);
+  --border-hairline: 1px solid rgba(0, 0, 0, 0.08);
+
+  /* Accent */
+  --accent:     #059669;
+  --accent-ink: #047857;
+
+  /* HUD */
+  --hud-blur: blur(14px);
+
+  /* Radius */
+  --radius-structural: 0px;
+  --radius-micro: 3px;
+  --radius-control: 6px;
+  --radius-card: 10px;
+  --radius-capsule: 9999px;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  color: var(--ink);
+  background-color: var(--canvas);
   min-height: 100vh;
+}
+
+@layer utilities {
+  .tabular-nums { font-variant-numeric: tabular-nums; }
+  .label-telemetry { font-size: 11px; color: var(--ink-3); letter-spacing: 0.04em; text-transform: uppercase; }
+  .value-telemetry { font-size: 34px; font-weight: 600; color: var(--ink); line-height: 1; font-variant-numeric: tabular-nums; }
+  .value-telemetry-sm { font-size: 21px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
 }

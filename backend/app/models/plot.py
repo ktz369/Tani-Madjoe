@@ -12,6 +12,13 @@ if TYPE_CHECKING:
     from app.models.gdd_accumulation import GddAccumulation
     from app.models.planting_season import PlantingSeason
     from app.models.spectral_index import SpectralIndex
+    from app.models.operations import (
+        PlotLaborLog,
+        PlotIrrigationLog,
+        PlotSaprotanApplication,
+        PestScoutingReport,
+        PostHarvestLog,
+    )
 
 
 class Plot(Base):
@@ -91,6 +98,36 @@ class Plot(Base):
         back_populates="plot",
         cascade="all, delete-orphan",
         order_by="Alert.created_at.desc()",
+    )
+    labor_logs: Mapped[list["PlotLaborLog"]] = relationship(
+        "PlotLaborLog",
+        back_populates="plot",
+        cascade="all, delete-orphan",
+        order_by="PlotLaborLog.activity_date.desc()",
+    )
+    irrigation_logs: Mapped[list["PlotIrrigationLog"]] = relationship(
+        "PlotIrrigationLog",
+        back_populates="plot",
+        cascade="all, delete-orphan",
+        order_by="PlotIrrigationLog.started_at.desc()",
+    )
+    saprotan_applications: Mapped[list["PlotSaprotanApplication"]] = relationship(
+        "PlotSaprotanApplication",
+        back_populates="plot",
+        cascade="all, delete-orphan",
+        order_by="PlotSaprotanApplication.application_date.desc()",
+    )
+    scouting_reports: Mapped[list["PestScoutingReport"]] = relationship(
+        "PestScoutingReport",
+        back_populates="plot",
+        cascade="all, delete-orphan",
+        order_by="PestScoutingReport.observation_date.desc()",
+    )
+    post_harvest_logs: Mapped[list["PostHarvestLog"]] = relationship(
+        "PostHarvestLog",
+        back_populates="plot",
+        cascade="all, delete-orphan",
+        order_by="PostHarvestLog.harvest_date.desc()",
     )
 
     def __repr__(self) -> str:

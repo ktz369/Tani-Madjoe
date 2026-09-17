@@ -17,10 +17,17 @@ Melakukan simulasi mendalam pada sistem deteksi peringatan dini agronomis dan pe
 
 **Blocked by:** None (Worker 5 dapat langsung berjalan).
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Bangun skrip simulasi `test_sim_alert_engine_smtp.py` yang menginjeksi dataset sintetis pemicu 4 aturan peringatan agronomis.
-- [ ] Uji mekanisme deduplikasi peringatan untuk mencegah duplikasi alert aktif.
-- [ ] Simulasikan pengiriman email SMTP dengan server mock dan server offline untuk memverifikasi fallback logging tanpa crash.
-- [ ] Uji sanitasi teks input pada konten email peringatan guna mencegah email header injection.
-- [ ] Dokumentasikan temuan bug dan rekomendasi peningkatan alert engine.
+- [x] Bangun skrip simulasi `test_sim_alert_engine_smtp.py` yang menginjeksi dataset sintetis pemicu 4 aturan peringatan agronomis.
+- [x] Uji mekanisme deduplikasi peringatan untuk mencegah duplikasi alert aktif.
+- [x] Simulasikan pengiriman email SMTP dengan server mock dan server offline untuk memverifikasi fallback logging tanpa crash.
+- [x] Uji sanitasi teks input pada konten email peringatan guna mencegah email header injection.
+- [x] Dokumentasikan temuan bug dan rekomendasi peningkatan alert engine.
+
+### Hasil Simulasi & Audit:
+- **Test Suite:** `backend/tests/simulations/test_sim_alert_engine_smtp.py` (30/30 passed).
+- **Evaluasi 4 Aturan Agronomis:** Seluruh aturan deteksi (Water Stress, Hama/Rebah NDVI drop, Defisiensi Nitrogen NDRE, dan Kekeringan Ekstrem 7 hari) terpicu secara akurat sesuai ambang batas.
+- **Mekanisme Deduplikasi:** Diverifikasi bahwa eksekusi berulang dalam jendela 7 hari tidak membuat alert baru, dan memperbolehkan alert berbeda berdampingan pada petak yang sama.
+- **Resiliensi SMTP:** Simulasi kegagalan koneksi, timeout, dan otentikasi salah ditangani dengan graceful logging tanpa menghentikan worker scheduler.
+- **Keamanan:** Sanitasi header injection (`\r\n`, `Bcc:`, `Subject:`) berhasil memblokir upaya eksfiltrasi email dan header tampering.

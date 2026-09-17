@@ -69,7 +69,7 @@ export function SpatialDropzone({
   if (fileInfo) {
     return (
       <div
-        className={`rounded-[13px] bg-white border border-black/[0.06] p-[13px] shadow-sm ${className}`}
+        className={`rounded-[3px] bg-white border border-black/[0.08] p-[13px] ${className}`}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-2.5 min-w-0">
@@ -134,12 +134,12 @@ export function SpatialDropzone({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       onClick={() => !loading && fileInputRef.current?.click()}
-      className={`relative rounded-[21px] bg-white border-2 border-dashed text-center cursor-pointer transition-all select-none ${
-        compact ? "p-[13px]" : "p-[21px]"
+      className={`relative rounded-[3px] bg-white border border-dashed border-black/[0.16] text-center cursor-pointer hover:bg-[var(--field)] transition-colors select-none ${
+        compact ? "p-[13px]" : "p-[34px]"
       } ${
         isDragging
-          ? "border-[#059669] bg-[#ecfdf5]/40 scale-[0.99]"
-          : "border-black/[0.12] hover:border-[#059669] hover:bg-[#ecfdf5]/20"
+          ? "border-[var(--accent)] bg-[var(--field)]"
+          : "border-black/[0.16]"
       } ${loading ? "cursor-wait opacity-90" : ""} ${className}`}
     >
       <input

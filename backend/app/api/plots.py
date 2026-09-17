@@ -35,10 +35,13 @@ from app.schemas.plot import (
 
 from app.schemas.satellite import PlotSatelliteTileResponse
 from app.schemas.report import SeasonComparisonResponse
+from app.services.estate_service import ensure_estate_centroid_from_polygon
 from app.services.gdd_service import predict_harvest_date, sync_gdd_for_plot
 from app.services.gee_service import get_map_tile
 from app.services.report_service import generate_season_comparison
+from app.services.satellite_backfill_service import backfill_satellite_indices_for_plot
 from app.services.satellite_indices import classify_vegetation_health, detect_sar_flooding
+from app.services.weather_service import sync_weather_for_estate
 from app.utils.geo import (
     calculate_polygon_area_hectares,
     coordinates_from_point,
@@ -539,16 +542,31 @@ async def batch_create_plots(
         except Exception as p_err:
             errors.append(f"Petak '{item.name}' (indeks {idx}): {str(p_err)}")
 
-    if not created_plots:
+    if errors:
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Seluruh petak gagal divalidasi: {'; '.join(errors)}",
+            detail=f"Transaksi batch dibatalkan (rollback atomik) karena terdapat petak gagal divalidasi: {'; '.join(errors)}",
+        )
+
+    if not created_plots:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tidak ada petak yang valid untuk didaftarkan.",
         )
 
     # Commit transactional batch save
-    await db.commit()
-    for p in created_plots:
-        await db.refresh(p)
+    try:
+        await db.commit()
+        for p in created_plots:
+            await db.refresh(p)
+    except Exception as commit_err:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Gagal menyimpan transaksi batch ke database: {str(commit_err)}",
+        )
 
     # 2. Auto-centroid propagation to estate if needed (Wave 8 / Ticket 01)
     if division.estate and created_plots:

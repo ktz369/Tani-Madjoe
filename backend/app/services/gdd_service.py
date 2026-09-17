@@ -12,6 +12,7 @@ Implements agronomic thermal time tracking:
 
 from datetime import date, datetime, timedelta
 import logging
+import math
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
@@ -56,6 +57,8 @@ def calculate_gdd_daily(
     """
     if tmax is None or tmin is None:
         return 0.0
+    if math.isnan(tmax) or math.isnan(tmin) or math.isinf(tmax) or math.isinf(tmin):
+        return 0.0
 
     eff_tmax = float(tmax)
     eff_tmin = float(tmin)
@@ -89,6 +92,9 @@ def predict_phase(gdd_cumulative: float, variety_phases: list) -> Optional[str]:
     Sorts variety_phases by gdd_target ascending and locates the corresponding phase.
     If gdd_cumulative exceeds the last phase target, returns the last phase.
     """
+    if gdd_cumulative is None or math.isnan(gdd_cumulative) or math.isinf(gdd_cumulative):
+        return None
+
     if not variety_phases:
         return None
 
@@ -110,6 +116,9 @@ def predict_phase(gdd_cumulative: float, variety_phases: list) -> Optional[str]:
 
 def get_active_phase(gdd_cumulative: float, variety_phases: list) -> Optional[Any]:
     """Get the active phase object or dictionary based on cumulative GDD."""
+    if gdd_cumulative is None or math.isnan(gdd_cumulative) or math.isinf(gdd_cumulative):
+        return None
+
     if not variety_phases:
         return None
 
@@ -141,14 +150,18 @@ def predict_harvest_date(
         gdd_target_total: Total GDD required for physiological maturity.
         avg_daily_gdd: Expected average daily GDD (default 15.0°C-days).
     """
-    if gdd_target_total is None or gdd_target_total <= 0:
+    if gdd_target_total is None or gdd_target_total <= 0 or math.isnan(gdd_target_total) or math.isinf(gdd_target_total):
+        return None
+    if gdd_cumulative is not None and (math.isnan(gdd_cumulative) or math.isinf(gdd_cumulative)):
         return None
 
-    remaining_gdd = max(0.0, float(gdd_target_total) - float(gdd_cumulative))
+    eff_cum = max(0.0, float(gdd_cumulative)) if gdd_cumulative is not None else 0.0
+    remaining_gdd = max(0.0, float(gdd_target_total) - eff_cum)
     rate = float(avg_daily_gdd) if avg_daily_gdd and avg_daily_gdd > 0 else 15.0
     days_left = round(remaining_gdd / rate)
 
-    return date.today() + timedelta(days=int(days_left))
+    base_date = planting_date if (planting_date and planting_date > date.today()) else date.today()
+    return base_date + timedelta(days=int(days_left))
 
 
 def calculate_etc(et0: Optional[float], kc: Optional[float]) -> Optional[float]:
@@ -159,6 +172,8 @@ def calculate_etc(et0: Optional[float], kc: Optional[float]) -> Optional[float]:
         kc: Crop coefficient for the active growth stage.
     """
     if et0 is None or kc is None:
+        return None
+    if math.isnan(et0) or math.isnan(kc) or math.isinf(et0) or math.isinf(kc):
         return None
     return round(float(et0) * float(kc), 2)
 

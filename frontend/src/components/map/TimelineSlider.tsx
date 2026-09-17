@@ -71,17 +71,22 @@ export default function TimelineSlider({
 
   if (dates.length === 0) {
     return (
-      <div className="bg-white/95 backdrop-blur-md px-4 py-2.5 rounded-xl border border-slate-200 shadow-lg text-xs text-slate-500 flex items-center gap-2">
-        <Clock className="w-4 h-4 text-slate-400 animate-spin" />
+      <div className="bg-white/85 backdrop-blur-[14px] px-4 py-2.5 rounded-[3px] border border-black/[0.08] shadow-[0_2px_16px_rgba(0,0,0,0.10)] text-xs text-[var(--ink-2)] flex items-center gap-2">
+        <Clock className="w-4 h-4 text-[var(--ink-3)] animate-spin" />
         <span>Memuat timeline pengamatan vegetasi...</span>
       </div>
     );
   }
 
-  // Helper status warna rata-rata NDVI
+  // Helper status warna rata-rata NDVI (kondisi < 0.30 adalah bera / tanah terbuka netral)
   const getNdviBadge = (val?: number | null) => {
     if (val === null || val === undefined) return { label: "N/A", bg: "bg-slate-100 text-slate-600" };
-    if (val < 0.3) return { label: `${val.toFixed(2)} (Kritis)`, bg: "bg-rose-100 text-rose-700" };
+    if (val < 0.3) {
+      return {
+        label: `${val.toFixed(2)} (Bera / Terbuka)`,
+        bg: "bg-slate-100 text-slate-700 border border-slate-300",
+      };
+    }
     if (val < 0.55) return { label: `${val.toFixed(2)} (Waspada)`, bg: "bg-amber-100 text-amber-800" };
     if (val <= 0.75) return { label: `${val.toFixed(2)} (Baik)`, bg: "bg-emerald-100 text-emerald-800" };
     return { label: `${val.toFixed(2)} (Sangat Baik)`, bg: "bg-teal-100 text-teal-800" };
@@ -90,9 +95,9 @@ export default function TimelineSlider({
   const ndviBadge = getNdviBadge(avgNdvi);
 
   return (
-    <div className="w-full max-w-3xl bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/90 p-3 sm:p-4 text-slate-800 select-none transition-all">
+    <div className="w-full max-w-3xl bg-white/85 backdrop-blur-[14px] rounded-[3px] shadow-[0_2px_16px_rgba(0,0,0,0.10)] border border-black/[0.08] p-3 sm:p-4 text-[var(--ink)] select-none transition-all">
       {/* Top Header Controls: Mode Toggle & Status Observasi */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5 pb-2 border-b border-slate-100">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5 pb-2 border-b border-black/[0.08]">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-emerald-600/10 text-emerald-700 flex items-center justify-center font-bold">
             <Calendar className="w-4 h-4" />

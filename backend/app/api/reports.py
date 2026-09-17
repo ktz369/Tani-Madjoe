@@ -19,9 +19,11 @@ from app.schemas.report import (
     SeasonComparisonResponse,
 )
 from app.services.report_service import (
+    export_plot_telemetry_csv,
     export_timeseries_csv,
     generate_harvest_prediction_report,
     generate_health_report,
+    generate_plot_telemetry_report,
     generate_season_comparison,
     generate_water_usage_report,
 )
@@ -278,4 +280,202 @@ async def download_archived_report(
         path=report.file_path,
         media_type=media_type,
         filename=report.file_name,
+    )
+
+
+@router.post(
+    "/plots/{plot_id}/telemetry-pdf",
+    summary="Unduh PDF Laporan Telemetri Petak Lahan",
+    description="Menghasilkan dokumen PDF laporan deret waktu telemetri satelit dan agroklimat per petak lahan (portrait/landscape).",
+)
+async def download_plot_telemetry_report(
+    plot_id: int,
+    orientation: str = Query("portrait", pattern="^(portrait|landscape)$", description="Orientasi halaman ('portrait' atau 'landscape')"),
+    start_date: Optional[date] = Query(None, description="Tanggal awal evaluasi (opsional)"),
+    end_date: Optional[date] = Query(None, description="Tanggal akhir evaluasi (opsional)"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Menghasilkan berkas PDF Laporan Telemetri Petak Lahan multi-halaman berorientasi potret atau lanskap."""
+    try:
+        pdf_bytes = await generate_plot_telemetry_report(
+            db=db,
+            plot_id=plot_id,
+            start_date=start_date,
+            end_date=end_date,
+            orientation=orientation,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Gagal menghasilkan laporan telemetri petak: {str(exc)}",
+        )
+
+    date_str = (end_date or date.today()).strftime("%Y%m%d")
+    filename = f"Laporan_Telemetri_Petak_{plot_id}_{orientation}_{date_str}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
+
+
+@router.get(
+    "/plots/{plot_id}/export-csv",
+    summary="Export CSV Telemetri Petak Lahan (Excel Compatible)",
+    description="Download berkas CSV standar berisi data deret waktu tanggal, hst, ndvi, ndre, ndwi, savi, bsi, suhu, curah hujan, dan et0 dengan UTF-8 BOM.",
+)
+async def download_plot_telemetry_csv(
+    plot_id: int,
+    start_date: Optional[date] = Query(None, description="Tanggal awal data"),
+    end_date: Optional[date] = Query(None, description="Tanggal akhir data"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mengunduh berkas CSV terstruktur berisi data agroklimat dan indeks satelit time-series petak lahan."""
+    try:
+        csv_str = await export_plot_telemetry_csv(
+            db=db,
+            plot_id=plot_id,
+            start_date=start_date,
+            end_date=end_date,
+            include_bom=True,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Gagal melakukan ekspor data telemetri petak: {str(exc)}",
+        )
+
+    date_str = (end_date or date.today()).strftime("%Y%m%d")
+    filename = f"Telemetri_Petak_{plot_id}_{date_str}.csv"
+
+    return Response(
+        content=csv_str.encode("utf-8"),  # Already starts with UTF-8 BOM \ufeff
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
+
+
+@router.get(
+    "/pdf",
+    summary="Unduh Laporan PDF Terpadu (ReportLab)",
+    description="Menghasilkan dokumen PDF laporan kesehatan lahan, NDVI, dan telemetri agroklimat.",
+)
+@router.post(
+    "/pdf",
+    summary="Unduh Laporan PDF Terpadu (ReportLab)",
+    description="Menghasilkan dokumen PDF laporan kesehatan lahan, NDVI, dan telemetri agroklimat.",
+)
+async def download_pdf_endpoint(
+    estate_id: int = Query(1, description="ID Estate perkebunan"),
+    plot_id: Optional[int] = Query(None, description="ID Petak lahan (opsional)"),
+    start_date: Optional[date] = Query(None, description="Tanggal awal evaluasi (opsional)"),
+    end_date: Optional[date] = Query(None, description="Tanggal akhir evaluasi (opsional)"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Menghasilkan berkas PDF ReportLab untuk estate atau petak tertentu."""
+    try:
+        if plot_id:
+            pdf_bytes = await generate_plot_telemetry_report(
+                db=db,
+                plot_id=plot_id,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            filename = f"Laporan_Telemetri_Petak_{plot_id}_{(end_date or date.today()).strftime('%Y%m%d')}.pdf"
+        else:
+            pdf_bytes = await generate_health_report(
+                db=db,
+                estate_id=estate_id,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            filename = f"Laporan_Kesehatan_Estate_{estate_id}_{(end_date or date.today()).strftime('%Y%m%d')}.pdf"
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Gagal menghasilkan laporan PDF: {str(exc)}",
+        )
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
+
+
+@router.get(
+    "/csv",
+    summary="Unduh Ekspor CSV Ringkasan Telemetri & Biaya Operasional",
+    description="Download berkas CSV standar berisi ringkasan telemetri petak dan log biaya operasional.",
+)
+@router.post(
+    "/csv",
+    summary="Unduh Ekspor CSV Ringkasan Telemetri & Biaya Operasional",
+    description="Download berkas CSV standar berisi ringkasan telemetri petak dan log biaya operasional.",
+)
+async def download_csv_endpoint(
+    estate_id: int = Query(1, description="ID Estate perkebunan"),
+    plot_id: Optional[int] = Query(None, description="ID Petak lahan (opsional)"),
+    start_date: Optional[date] = Query(None, description="Tanggal awal data"),
+    end_date: Optional[date] = Query(None, description="Tanggal akhir data"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Download CSV time-series dan ringkasan telemetri petak."""
+    try:
+        if plot_id:
+            csv_str = await export_plot_telemetry_csv(
+                db=db,
+                plot_id=plot_id,
+                start_date=start_date,
+                end_date=end_date,
+                include_bom=True,
+            )
+            filename = f"Telemetri_Petak_{plot_id}_{(end_date or date.today()).strftime('%Y%m%d')}.csv"
+            content_bytes = csv_str.encode("utf-8")
+        else:
+            csv_str = await export_timeseries_csv(
+                db=db,
+                estate_id=estate_id,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            filename = f"Timeseries_Agroklimat_Estate_{estate_id}_{(end_date or date.today()).strftime('%Y%m%d')}.csv"
+            content_bytes = csv_str.encode("utf-8-sig")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Gagal melakukan ekspor CSV: {str(exc)}",
+        )
+
+    return Response(
+        content=content_bytes,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
     )

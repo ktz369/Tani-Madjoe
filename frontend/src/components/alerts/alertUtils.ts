@@ -68,12 +68,16 @@ export interface SeverityConfig {
 }
 
 export function getSeverityConfig(severity: string): SeverityConfig {
-  switch (severity?.toLowerCase()) {
+  const s = (severity || "").toLowerCase();
+  switch (s) {
     case "merah":
+    case "critical":
+    case "kritis":
+    case "berat":
       return {
         key: "merah",
-        label: "Kritis (Hama / Rebah)",
-        shortLabel: "Kritis",
+        label: "CRITICAL (Kritis / Hama)",
+        shortLabel: "CRITICAL",
         badgeBg: "bg-rose-100",
         badgeText: "text-rose-800",
         badgeBorder: "border-rose-200",
@@ -85,10 +89,13 @@ export function getSeverityConfig(severity: string): SeverityConfig {
         emoji: "🔴",
       };
     case "oranye":
+    case "warning":
+    case "waspada":
+    case "sedang":
       return {
         key: "oranye",
-        label: "Cekaman Air (Kekeringan)",
-        shortLabel: "Cekaman Air",
+        label: "WARNING (Cekaman Air / Waspada)",
+        shortLabel: "WARNING",
         badgeBg: "bg-orange-100",
         badgeText: "text-orange-800",
         badgeBorder: "border-orange-200",
@@ -102,8 +109,8 @@ export function getSeverityConfig(severity: string): SeverityConfig {
     case "kuning":
       return {
         key: "kuning",
-        label: "Defisiensi Nitrogen (Klorofil)",
-        shortLabel: "Defisiensi N",
+        label: "WARNING (Defisiensi Nitrogen)",
+        shortLabel: "WARNING",
         badgeBg: "bg-amber-100",
         badgeText: "text-amber-800",
         badgeBorder: "border-amber-200",
@@ -115,10 +122,13 @@ export function getSeverityConfig(severity: string): SeverityConfig {
         emoji: "🟡",
       };
     case "hijau_tua":
+    case "info":
+    case "informasi":
+    case "ringan":
       return {
         key: "hijau_tua",
-        label: "Siap Panen (Kematangan)",
-        shortLabel: "Siap Panen",
+        label: "INFO (Siap Panen / Informasi)",
+        shortLabel: "INFO",
         badgeBg: "bg-emerald-100",
         badgeText: "text-emerald-800",
         badgeBorder: "border-emerald-200",
@@ -132,8 +142,8 @@ export function getSeverityConfig(severity: string): SeverityConfig {
     default:
       return {
         key: severity || "info",
-        label: severity || "Peringatan",
-        shortLabel: severity || "Info",
+        label: severity ? `INFO (${severity})` : "INFO",
+        shortLabel: "INFO",
         badgeBg: "bg-slate-100",
         badgeText: "text-slate-800",
         badgeBorder: "border-slate-200",

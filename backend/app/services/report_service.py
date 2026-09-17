@@ -11,6 +11,7 @@ Implements:
 
 import csv
 from datetime import date, datetime, timedelta, timezone
+import html
 import io
 import logging
 import os
@@ -25,7 +26,7 @@ except ImportError:
 
 # ReportLab imports
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm, mm
 from reportlab.pdfgen import canvas
@@ -96,7 +97,7 @@ class NumberedCanvas(canvas.Canvas):
     def draw_page_decorations(self, total_pages: int) -> None:
         """Render running header and footer on every page."""
         self.saveState()
-        page_w, page_h = A4
+        page_w, page_h = getattr(self, "_pagesize", A4)
 
         # Top running header line (on pages after the first page)
         if self._pageNumber > 1:
@@ -284,32 +285,69 @@ def _get_report_styles() -> Dict[str, ParagraphStyle]:
     }
 
 
+def _escape_xml(text: Any) -> str:
+    """Escape XML/HTML entities (&, <, >, ", ') safely for ReportLab Paragraph rendering."""
+    if text is None:
+        return ""
+    val = str(text)
+    return html.escape(val, quote=True)
+
+
+def _format_hectares(area: Optional[float]) -> str:
+    """Format plot area with adaptive precision and thousand separators."""
+    if area is None:
+        return "0.0 Ha"
+    try:
+        val = float(area)
+    except (ValueError, TypeError):
+        return f"{area} Ha"
+    if val <= 0:
+        return "0.0 Ha"
+    if val < 0.01:
+        return f"{val:.4f} Ha"
+    if val < 1.0:
+        return f"{val:.2f} Ha"
+    if val >= 10000.0:
+        return f"{val:,.1f} Ha"
+    return f"{val:.1f} Ha"
+
+
 def _build_doc_header(
     title: str,
     estate_name: str,
     location_desc: str,
     date_range_desc: str,
     styles: Dict[str, ParagraphStyle],
+    page_width_mm: float = 210.0,
 ) -> List[Any]:
     """Construct standard executive letterhead for Tani reports."""
     now_str = datetime.now(timezone.utc).strftime("%d %B %Y, %H:%M WIB")
 
+    safe_title = _escape_xml(title)
+    safe_estate = _escape_xml(estate_name)
+    safe_loc = _escape_xml(location_desc)
+    safe_date = _escape_xml(date_range_desc)
+
+    printable_w = max(170.0, page_width_mm - 30.0)
+    col1_w = printable_w * 0.70 * mm
+    col2_w = printable_w * 0.30 * mm
+
     header_table_data = [
         [
-            Paragraph(f"<b>{title.upper()}</b>", styles["title"]),
+            Paragraph(f"<b>{safe_title.upper()}</b>", styles["title"]),
             Paragraph(f"<b>Tanggal Cetak:</b> {now_str}<br/><b>Status:</b> Terverifikasi Sistem", styles["meta"]),
         ],
         [
             Paragraph(
-                f"<b>Estate:</b> {estate_name} | <b>Lokasi:</b> {location_desc}<br/>"
-                f"<b>Periode Evaluasi:</b> {date_range_desc}",
+                f"<b>Estate:</b> {safe_estate} | <b>Lokasi:</b> {safe_loc}<br/>"
+                f"<b>Periode Evaluasi:</b> {safe_date}",
                 styles["subtitle"],
             ),
             "",
         ],
     ]
 
-    header_table = Table(header_table_data, colWidths=[120 * mm, 50 * mm])
+    header_table = Table(header_table_data, colWidths=[col1_w, col2_w])
     header_table.setStyle(
         TableStyle(
             [
@@ -494,25 +532,30 @@ async def generate_health_report(
     table_rows = [table_headers]
 
     for p in plots:
-        div_name = p.division.name if p.division else "-"
-        var_name = p.variety.name if p.variety else "-"
+        div_name = _escape_xml(p.division.name) if p.division else "-"
+        var_name = _escape_xml(p.variety.name) if p.variety else "-"
+        safe_name = _escape_xml(p.name)
+        safe_crop = _escape_xml(p.crop_type.capitalize()) if p.crop_type else "-"
         hst = p.current_hst or 0
-        phase = p.current_phase or "Vegetatif"
+        phase = _escape_xml(p.current_phase or "Vegetatif")
+        area_str = _format_hectares(p.area_hectares)
 
         # NDVI for this plot
         p_specs = spectral_map.get(p.id, [])
         p_ndvis = [s.ndvi for s in p_specs if s.ndvi is not None]
-        avg_ndvi = round(sum(p_ndvis) / len(p_ndvis), 2) if p_ndvis else 0.0
-
-        # Health status classification
-        if avg_ndvi >= 0.65:
-            health_badge = Paragraph(f"<b>{avg_ndvi:.2f}</b><br/>(Sangat Sehat)", styles["badge_green"])
-        elif avg_ndvi >= 0.45:
-            health_badge = Paragraph(f"<b>{avg_ndvi:.2f}</b><br/>(Normal)", styles["badge_green"])
-        elif avg_ndvi >= 0.30:
-            health_badge = Paragraph(f"<b>{avg_ndvi:.2f}</b><br/>(Waspada/Stres)", styles["badge_yellow"])
+        if not p_specs or not p_ndvis:
+            health_badge = Paragraph("<b>-</b><br/><font color='#64748b'>(Belum Ada Data)</font>", styles["td_center"])
         else:
-            health_badge = Paragraph(f"<b>{avg_ndvi:.2f}</b><br/>(Kritis/Gundul)", styles["badge_red"])
+            avg_ndvi = round(sum(p_ndvis) / len(p_ndvis), 2)
+            # Health status classification
+            if avg_ndvi >= 0.65:
+                health_badge = Paragraph(f"<b>{avg_ndvi:.2f}</b><br/>(Sangat Sehat)", styles["badge_green"])
+            elif avg_ndvi >= 0.45:
+                health_badge = Paragraph(f"<b>{avg_ndvi:.2f}</b><br/>(Normal)", styles["badge_green"])
+            elif avg_ndvi >= 0.30:
+                health_badge = Paragraph(f"<b>{avg_ndvi:.2f}</b><br/>(Waspada/Stres)", styles["badge_yellow"])
+            else:
+                health_badge = Paragraph(f"<b>{avg_ndvi:.2f}</b><br/>(Kritis/Gundul)", styles["badge_red"])
 
         # Active Alerts for plot
         active_p_alerts = [a for a in p.alerts if not a.is_resolved]
@@ -523,18 +566,26 @@ async def generate_health_report(
             alert_items = []
             for a in active_p_alerts[:2]:
                 color_hex = "#dc2626" if a.severity == "merah" else ("#ea580c" if a.severity == "oranye" else "#d97706")
-                alert_items.append(f"<font color='{color_hex}'>• {a.title}</font>")
+                alert_items.append(f"<font color='{color_hex}'>• {_escape_xml(a.title)}</font>")
             alert_cell = Paragraph("<br/>".join(alert_items), styles["td"])
-            rekom_text = active_p_alerts[0].recommendation if active_p_alerts[0].recommendation else "Inspeksi langsung petak lahan."
+            rekom_text = _escape_xml(active_p_alerts[0].recommendation) if active_p_alerts[0].recommendation else "Inspeksi langsung petak lahan."
 
         table_rows.append(
             [
-                Paragraph(f"<b>{p.name}</b><br/><font color='#64748b'>{div_name} ({p.area_hectares:.1f} Ha)</font>", styles["td"]),
-                Paragraph(f"<b>{p.crop_type.capitalize()}</b><br/>{var_name}", styles["td"]),
+                Paragraph(f"<b>{safe_name}</b><br/><font color='#64748b'>{div_name} ({area_str})</font>", styles["td"]),
+                Paragraph(f"<b>{safe_crop}</b><br/>{var_name}", styles["td"]),
                 Paragraph(f"<b>{hst} HST</b><br/>{phase}", styles["td_center"]),
                 health_badge,
                 alert_cell,
                 Paragraph(rekom_text, styles["td"]),
+            ]
+        )
+
+    if not plots:
+        table_rows.append(
+            [
+                Paragraph("Belum ada petak lahan terdaftar pada estate ini.", styles["td_center"]),
+                "", "", "", "", "",
             ]
         )
 
@@ -543,21 +594,21 @@ async def generate_health_report(
         colWidths=[32 * mm, 26 * mm, 22 * mm, 24 * mm, 32 * mm, 44 * mm],
         repeatRows=1,
     )
-    plots_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#065f46")),
-                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
-                ("TOPPADDING", (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-                ("LEFTPADDING", (0, 0), (-1, -1), 3),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-            ]
-        )
-    )
+    table_styles = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#065f46")),
+        ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+    ]
+    if not plots:
+        table_styles.append(("SPAN", (0, 1), (-1, 1)))
+        table_styles.append(("ALIGN", (0, 1), (-1, 1), "CENTER"))
+    plots_table.setStyle(TableStyle(table_styles))
     story.append(plots_table)
     story.append(Spacer(1, 10))
 
@@ -777,11 +828,17 @@ async def generate_harvest_prediction_report(
         pct_val = item["progress_pct"]
         pct_cell = Paragraph(f"<b>{pct_val:.1f}%</b>", styles["badge_green"] if pct_val >= 90 else styles["td_center"])
 
+        safe_p_name = _escape_xml(p.name)
+        safe_div = _escape_xml(div_name)
+        safe_crop = _escape_xml(p.crop_type.capitalize()) if p.crop_type else "-"
+        safe_var = _escape_xml(item['variety'])
+        safe_area = _format_hectares(p.area_hectares)
+
         table_rows.append(
             [
-                Paragraph(f"<b>{p.name}</b><br/><font color='#64748b'>{div_name}</font>", styles["td"]),
-                Paragraph(f"<b>{p.crop_type.capitalize()}</b><br/>{item['variety']}", styles["td"]),
-                Paragraph(f"{p.area_hectares:.1f} Ha", styles["td_center"]),
+                Paragraph(f"<b>{safe_p_name}</b><br/><font color='#64748b'>{safe_div}</font>", styles["td"]),
+                Paragraph(f"<b>{safe_crop}</b><br/>{safe_var}", styles["td"]),
+                Paragraph(safe_area, styles["td_center"]),
                 Paragraph(f"{item['hst']} / {item['cycle_days']} hr", styles["td_center"]),
                 Paragraph(f"{item['latest_gdd']:.0f} / {item['target_gdd']:.0f}", styles["td_center"]),
                 pct_cell,
@@ -790,26 +847,34 @@ async def generate_harvest_prediction_report(
             ]
         )
 
+    if not report_items:
+        table_rows.append(
+            [
+                Paragraph("Belum ada petak lahan atau proyeksi panen aktif.", styles["td_center"]),
+                "", "", "", "", "", "", "",
+            ]
+        )
+
     harvest_table = Table(
         table_rows,
         colWidths=[28 * mm, 26 * mm, 16 * mm, 20 * mm, 24 * mm, 18 * mm, 26 * mm, 22 * mm],
         repeatRows=1,
     )
-    harvest_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#065f46")),
-                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
-                ("TOPPADDING", (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-                ("LEFTPADDING", (0, 0), (-1, -1), 3),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-            ]
-        )
-    )
+    harvest_styles = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#065f46")),
+        ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+    ]
+    if not report_items:
+        harvest_styles.append(("SPAN", (0, 1), (-1, 1)))
+        harvest_styles.append(("ALIGN", (0, 1), (-1, 1), "CENTER"))
+    harvest_table.setStyle(TableStyle(harvest_styles))
     story.append(harvest_table)
     story.append(Spacer(1, 10))
 
@@ -1034,16 +1099,29 @@ async def generate_water_usage_report(
     for item in plot_water_data:
         p = item["plot"]
         div_name = p.division.name if p.division else "-"
+        safe_p_name = _escape_xml(p.name)
+        safe_div = _escape_xml(div_name)
+        safe_phase = _escape_xml(item['phase'])
+        safe_recom = _escape_xml(item['recommendation'])
+        safe_area = _format_hectares(item['area_ha'])
 
         table_rows.append(
             [
-                Paragraph(f"<b>{p.name}</b><br/><font color='#64748b'>{div_name}</font>", styles["td"]),
-                Paragraph(f"{item['area_ha']:.1f} Ha", styles["td_center"]),
-                Paragraph(f"{item['phase']}", styles["td"]),
+                Paragraph(f"<b>{safe_p_name}</b><br/><font color='#64748b'>{safe_div}</font>", styles["td"]),
+                Paragraph(safe_area, styles["td_center"]),
+                Paragraph(safe_phase, styles["td"]),
                 Paragraph(f"{item['kc']:.2f}", styles["td_center"]),
                 Paragraph(f"<b>{item['etc_daily']:.2f}</b> mm", styles["td_center"]),
                 Paragraph(f"<b>{item['period_m3']:,.0f} m³</b>", styles["td_center"]),
-                Paragraph(item["recommendation"], styles["td"]),
+                Paragraph(safe_recom, styles["td"]),
+            ]
+        )
+
+    if not plot_water_data:
+        table_rows.append(
+            [
+                Paragraph("Belum ada petak lahan atau data kebutuhan irigasi terdaftar.", styles["td_center"]),
+                "", "", "", "", "", "",
             ]
         )
 
@@ -1052,21 +1130,21 @@ async def generate_water_usage_report(
         colWidths=[32 * mm, 18 * mm, 26 * mm, 14 * mm, 22 * mm, 24 * mm, 44 * mm],
         repeatRows=1,
     )
-    water_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#065f46")),
-                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
-                ("TOPPADDING", (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-                ("LEFTPADDING", (0, 0), (-1, -1), 3),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-            ]
-        )
-    )
+    water_styles = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#065f46")),
+        ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+    ]
+    if not plot_water_data:
+        water_styles.append(("SPAN", (0, 1), (-1, 1)))
+        water_styles.append(("ALIGN", (0, 1), (-1, 1), "CENTER"))
+    water_table.setStyle(TableStyle(water_styles))
     story.append(water_table)
     story.append(Spacer(1, 10))
 
@@ -1284,8 +1362,513 @@ async def export_timeseries_csv(
 
 
 # =============================================================================
-# 5. Analisis Perbandingan Antar Musim (generate_season_comparison)
+# 4.1 Laporan Deret Waktu Telemetri & Agroklimat Petak (generate_plot_telemetry_report)
 # =============================================================================
+
+
+async def generate_plot_telemetry_report(
+    db: AsyncSession,
+    plot_id: int,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    orientation: str = "portrait",
+) -> bytes:
+    """Generate professional agronomy PDF report for a single plot's telemetry and agroclimate.
+
+    Supports:
+    - Multi-page layout, portrait/landscape orientation
+    - Dynamic pagination (handles 5 vs 50+ observations cleanly with repeated table headers)
+    - Institutional header, plot metadata profile, KPI cards
+    - Satellite telemetry table (NDVI, NDRE, NDWI, SAVI, SAR VV/VH, status)
+    - Weather summary table (Tmin, Tmax, Rainfall, ET0)
+    - Resilient to special characters, XML/HTML entities, emojis, ultra-long plot names
+    - Boundary cases: 0 telemetry points, microscopic plots (<0.01 Ha), massive plots (>10,000 Ha), null metrics
+    """
+    from app.models.crop_variety import CropVariety
+    from app.models.division import Division
+    from app.models.estate import Estate
+    from app.models.plot import Plot
+    from app.models.spectral_index import SpectralIndex
+    from app.models.weather_data import WeatherData
+
+    # 1. Fetch Plot with related Division, Estate, Variety
+    stmt_plot = (
+        select(Plot)
+        .options(
+            selectinload(Plot.division).selectinload(Division.estate).selectinload(Estate.company),
+            selectinload(Plot.variety).selectinload(CropVariety.phases),
+            selectinload(Plot.alerts),
+        )
+        .where(Plot.id == plot_id)
+    )
+    plot = (await db.execute(stmt_plot)).scalar_one_or_none()
+    if not plot:
+        raise ValueError(f"Petak lahan dengan ID {plot_id} tidak ditemukan.")
+
+    today = date.today()
+    if not end_date:
+        end_date = today
+    if not start_date:
+        start_date = end_date - timedelta(days=60)
+
+    division = plot.division
+    estate = division.estate if division else None
+
+    # 2. Fetch Spectral Index observations for plot
+    stmt_spec = (
+        select(SpectralIndex)
+        .where(
+            SpectralIndex.plot_id == plot_id,
+            SpectralIndex.observation_date >= start_date,
+            SpectralIndex.observation_date <= end_date,
+        )
+        .order_by(SpectralIndex.observation_date.desc())
+    )
+    spec_rows = (await db.execute(stmt_spec)).scalars().all()
+
+    # 3. Fetch Weather observations for estate
+    weather_rows = []
+    if estate:
+        stmt_w = (
+            select(WeatherData)
+            .where(
+                WeatherData.estate_id == estate.id,
+                WeatherData.observation_date >= start_date,
+                WeatherData.observation_date <= end_date,
+            )
+            .order_by(WeatherData.observation_date.desc())
+        )
+        weather_rows = (await db.execute(stmt_w)).scalars().all()
+
+    # Summary metrics
+    ndvis = [s.ndvi for s in spec_rows if s.ndvi is not None]
+    ndres = [s.ndre for s in spec_rows if s.ndre is not None]
+    ndwis = [s.ndwi for s in spec_rows if s.ndwi is not None]
+    rains = [w.rainfall_mm for w in weather_rows if w.rainfall_mm is not None]
+
+    avg_ndvi = round(sum(ndvis) / len(ndvis), 3) if ndvis else None
+    peak_ndvi = round(max(ndvis), 3) if ndvis else None
+    avg_ndwi = round(sum(ndwis) / len(ndwis), 3) if ndwis else None
+    total_rain = round(sum(rains), 1) if rains else 0.0
+
+    # 4. Document Setup
+    is_landscape = (str(orientation).lower() == "landscape")
+    pagesize = landscape(A4) if is_landscape else A4
+    page_w_mm = 297.0 if is_landscape else 210.0
+    printable_w_mm = 267.0 if is_landscape else 180.0
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=pagesize,
+        leftMargin=15 * mm,
+        rightMargin=15 * mm,
+        topMargin=20 * mm,
+        bottomMargin=20 * mm,
+    )
+
+    styles = _get_report_styles()
+    story: List[Any] = []
+
+    # Header
+    estate_name = estate.name if estate else "Estate Tani"
+    loc_desc = f"{estate.kabupaten or ''}, {estate.province or ''}".strip(", ") if estate else "Indonesia"
+    if not loc_desc:
+        loc_desc = "Indonesia"
+    date_desc = f"{start_date.strftime('%d/%m/%Y')} s/d {end_date.strftime('%d/%m/%Y')}"
+
+    story.extend(
+        _build_doc_header(
+            title="Laporan Deret Waktu Telemetri & Agroklimat",
+            estate_name=estate_name,
+            location_desc=loc_desc,
+            date_range_desc=date_desc,
+            styles=styles,
+            page_width_mm=page_w_mm,
+        )
+    )
+
+    # Plot Metadata Block
+    safe_plot_name = _escape_xml(plot.name)
+    safe_div_name = _escape_xml(division.name) if division else "-"
+    safe_crop = _escape_xml(plot.crop_type.capitalize()) if plot.crop_type else "-"
+    safe_var = _escape_xml(plot.variety.name) if plot.variety else "-"
+    area_str = _format_hectares(plot.area_hectares)
+    hst_str = f"{plot.current_hst or 0} HST"
+    phase_str = _escape_xml(plot.current_phase or "Vegetatif")
+    plant_str = plot.planting_date.strftime("%d/%m/%Y") if plot.planting_date else "-"
+
+    col_meta = printable_w_mm / 4.0 * mm
+    meta_table_data = [
+        [
+            Paragraph(f"<b>Nama Petak:</b> {safe_plot_name}", styles["td"]),
+            Paragraph(f"<b>Divisi / Blok:</b> {safe_div_name}", styles["td"]),
+            Paragraph(f"<b>Komoditas:</b> {safe_crop}", styles["td"]),
+            Paragraph(f"<b>Varietas:</b> {safe_var}", styles["td"]),
+        ],
+        [
+            Paragraph(f"<b>Luas Lahan:</b> {area_str}", styles["td"]),
+            Paragraph(f"<b>Tgl Tanam:</b> {plant_str}", styles["td"]),
+            Paragraph(f"<b>Umur Tanaman:</b> {hst_str}", styles["td"]),
+            Paragraph(f"<b>Fase Fenologi:</b> {phase_str}", styles["td"]),
+        ],
+    ]
+    meta_table = Table(meta_table_data, colWidths=[col_meta] * 4)
+    meta_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
+                ("BOX", (0, 0), (-1, -1), 1, colors.HexColor("#cbd5e1")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+    story.append(meta_table)
+    story.append(Spacer(1, 8))
+
+    # KPI Summary Cards
+    col_kpi = printable_w_mm / 5.0 * mm
+    kpi_ndvi_str = f"{avg_ndvi:.3f}" if avg_ndvi is not None else "-"
+    kpi_peak_str = f"{peak_ndvi:.3f}" if peak_ndvi is not None else "-"
+    kpi_ndwi_str = f"{avg_ndwi:.3f}" if avg_ndwi is not None else "-"
+
+    kpi_data = [
+        [
+            Paragraph("TOTAL OBSERVASI", styles["box_label"]),
+            Paragraph("RATA-RATA NDVI", styles["box_label"]),
+            Paragraph("PUNCAK NDVI", styles["box_label"]),
+            Paragraph("RATA-RATA NDWI", styles["box_label"]),
+            Paragraph("TOTAL HUJAN", styles["box_label"]),
+        ],
+        [
+            Paragraph(f"<b>{len(spec_rows)} Rekaman</b>", styles["box_val"]),
+            Paragraph(f"<b>{kpi_ndvi_str}</b>", styles["box_val"]),
+            Paragraph(f"<font color='#047857'><b>{kpi_peak_str}</b></font>", styles["box_val"]),
+            Paragraph(f"<b>{kpi_ndwi_str}</b>", styles["box_val"]),
+            Paragraph(f"<b>{total_rain:.1f} mm</b>", styles["box_val"]),
+        ],
+    ]
+    kpi_table = Table(kpi_data, colWidths=[col_kpi] * 5)
+    kpi_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
+                ("BOX", (0, 0), (-1, -1), 1, colors.HexColor("#e2e8f0")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+    story.append(kpi_table)
+    story.append(Spacer(1, 10))
+
+    # Satellite Telemetry Table
+    story.append(Paragraph("DERET WAKTU TELEMETRI SATELIT (SENTINEL-2 & SENTINEL-1 SAR)", styles["heading"]))
+
+    if is_landscape:
+        spec_col_widths = [26 * mm, 24 * mm, 16 * mm, 24 * mm, 24 * mm, 24 * mm, 24 * mm, 26 * mm, 26 * mm, 53 * mm]
+        spec_headers = [
+            Paragraph("Tanggal", styles["th"]),
+            Paragraph("Satelit", styles["th"]),
+            Paragraph("HST", styles["th"]),
+            Paragraph("NDVI", styles["th"]),
+            Paragraph("NDRE", styles["th"]),
+            Paragraph("NDWI", styles["th"]),
+            Paragraph("SAVI", styles["th"]),
+            Paragraph("SAR VV dB", styles["th"]),
+            Paragraph("SAR VH dB", styles["th"]),
+            Paragraph("Status Kanopi", styles["th"]),
+        ]
+    else:
+        spec_col_widths = [24 * mm, 14 * mm, 20 * mm, 20 * mm, 20 * mm, 20 * mm, 20 * mm, 20 * mm, 22 * mm]
+        spec_headers = [
+            Paragraph("Tanggal", styles["th"]),
+            Paragraph("HST", styles["th"]),
+            Paragraph("NDVI", styles["th"]),
+            Paragraph("NDRE", styles["th"]),
+            Paragraph("NDWI", styles["th"]),
+            Paragraph("SAVI", styles["th"]),
+            Paragraph("SAR VV", styles["th"]),
+            Paragraph("SAR VH", styles["th"]),
+            Paragraph("Status", styles["th"]),
+        ]
+
+    spec_table_rows = [spec_headers]
+
+    if not spec_rows:
+        empty_msg = "Belum ada rekaman telemetri satelit pada rentang tanggal ini."
+        empty_row = [Paragraph(empty_msg, styles["td_center"])] + [""] * (len(spec_headers) - 1)
+        spec_table_rows.append(empty_row)
+    else:
+        for s in spec_rows:
+            obs_str = s.observation_date.strftime("%d/%m/%Y")
+            obs_hst = str(max(0, (s.observation_date - plot.planting_date).days)) if plot.planting_date else "-"
+            sat_name = _escape_xml(s.satellite or "sentinel-2")
+            ndvi_val = f"{s.ndvi:.4f}" if s.ndvi is not None else "-"
+            ndre_val = f"{s.ndre:.4f}" if s.ndre is not None else "-"
+            ndwi_val = f"{s.ndwi:.4f}" if s.ndwi is not None else "-"
+            savi_val = f"{s.savi:.4f}" if s.savi is not None else "-"
+            vv_val = f"{s.sar_vv_db:.1f}" if s.sar_vv_db is not None else "-"
+            vh_val = f"{s.sar_vh_db:.1f}" if s.sar_vh_db is not None else "-"
+
+            if s.ndvi is None:
+                status_p = Paragraph("-", styles["td_center"])
+            elif s.ndvi >= 0.65:
+                status_p = Paragraph("Sangat Sehat", styles["badge_green"])
+            elif s.ndvi >= 0.45:
+                status_p = Paragraph("Normal", styles["badge_green"])
+            elif s.ndvi >= 0.30:
+                status_p = Paragraph("Stres Ringan", styles["badge_yellow"])
+            else:
+                status_p = Paragraph("Kritis/Gundul", styles["badge_red"])
+
+            if is_landscape:
+                row = [
+                    Paragraph(obs_str, styles["td_center"]),
+                    Paragraph(sat_name, styles["td_center"]),
+                    Paragraph(obs_hst, styles["td_center"]),
+                    Paragraph(ndvi_val, styles["td_center"]),
+                    Paragraph(ndre_val, styles["td_center"]),
+                    Paragraph(ndwi_val, styles["td_center"]),
+                    Paragraph(savi_val, styles["td_center"]),
+                    Paragraph(vv_val, styles["td_center"]),
+                    Paragraph(vh_val, styles["td_center"]),
+                    status_p,
+                ]
+            else:
+                row = [
+                    Paragraph(obs_str, styles["td_center"]),
+                    Paragraph(obs_hst, styles["td_center"]),
+                    Paragraph(ndvi_val, styles["td_center"]),
+                    Paragraph(ndre_val, styles["td_center"]),
+                    Paragraph(ndwi_val, styles["td_center"]),
+                    Paragraph(savi_val, styles["td_center"]),
+                    Paragraph(vv_val, styles["td_center"]),
+                    Paragraph(vh_val, styles["td_center"]),
+                    status_p,
+                ]
+            spec_table_rows.append(row)
+
+    spec_table = Table(spec_table_rows, colWidths=spec_col_widths, repeatRows=1)
+    table_style_commands = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#065f46")),
+        ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+        ("TOPPADDING", (0, 0), (-1, -1), 3.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+    ]
+    if not spec_rows:
+        table_style_commands.append(("SPAN", (0, 1), (-1, 1)))
+        table_style_commands.append(("ALIGN", (0, 1), (-1, 1), "CENTER"))
+
+    spec_table.setStyle(TableStyle(table_style_commands))
+    story.append(spec_table)
+    story.append(Spacer(1, 10))
+
+    # Weather Summary Table
+    story.append(Paragraph("RINGKASAN AGROKLIMAT & CUACA HARIAN", styles["heading"]))
+
+    w_col_widths = [printable_w_mm / 5.0 * mm] * 5
+    w_headers = [
+        Paragraph("Tanggal", styles["th"]),
+        Paragraph("Suhu Min (°C)", styles["th"]),
+        Paragraph("Suhu Max (°C)", styles["th"]),
+        Paragraph("Curah Hujan (mm)", styles["th"]),
+        Paragraph("Evapotranspirasi ET0 (mm)", styles["th"]),
+    ]
+    w_table_rows = [w_headers]
+
+    if not weather_rows:
+        empty_w_msg = "Belum ada rekaman data agroklimat / cuaca pada rentang tanggal ini."
+        w_table_rows.append([Paragraph(empty_w_msg, styles["td_center"]), "", "", "", ""])
+    else:
+        for w in weather_rows[:30]:  # Up to 30 most recent weather observations
+            w_date_str = w.observation_date.strftime("%d/%m/%Y")
+            w_tmin = f"{w.temp_min_c:.1f}" if w.temp_min_c is not None else "-"
+            w_tmax = f"{w.temp_max_c:.1f}" if w.temp_max_c is not None else "-"
+            w_rain = f"{w.rainfall_mm:.1f}" if w.rainfall_mm is not None else "-"
+            w_et0 = f"{w.et0_mm:.2f}" if w.et0_mm is not None else "-"
+
+            w_table_rows.append(
+                [
+                    Paragraph(w_date_str, styles["td_center"]),
+                    Paragraph(w_tmin, styles["td_center"]),
+                    Paragraph(w_tmax, styles["td_center"]),
+                    Paragraph(w_rain, styles["td_center"]),
+                    Paragraph(w_et0, styles["td_center"]),
+                ]
+            )
+
+    w_table = Table(w_table_rows, colWidths=w_col_widths, repeatRows=1)
+    w_style_commands = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#065f46")),
+        ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+        ("TOPPADDING", (0, 0), (-1, -1), 3.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+    ]
+    if not weather_rows:
+        w_style_commands.append(("SPAN", (0, 1), (-1, 1)))
+        w_style_commands.append(("ALIGN", (0, 1), (-1, 1), "CENTER"))
+
+    w_table.setStyle(TableStyle(w_style_commands))
+    story.append(w_table)
+    story.append(Spacer(1, 10))
+
+    # Interpretation footer
+    footer_notes = [
+        Paragraph("<b>Petunjuk Interpretasi Data Agronomi:</b>", styles["heading"]),
+        Paragraph(
+            "1. <b>NDVI (Normalized Difference Vegetation Index):</b> Indikator kerapatan biomassa hijau. Nilai &ge; 0.65 mencerminkan kanopi puncak sehat.<br/>"
+            "2. <b>NDRE (Red-Edge Index):</b> Detektor dini klorofil dan stres nitrogen pada daun lapisan atas tanaman.<br/>"
+            "3. <b>NDWI (Water Index):</b> Mengukur kecukupan hidrasi sel daun. Nilai turun drastis mendeteksi cekaman kekeringan pra-gejala visual.<br/>"
+            "4. <b>SAR VV/VH:</b> Hamburan balik radar gelombang mikro Sentinel-1 untuk memantau struktur tegakan tanaman tanpa terganggu awan.",
+            styles["note"],
+        ),
+    ]
+    story.append(KeepTogether(footer_notes))
+
+    doc.build(story, canvasmaker=NumberedCanvas)
+    return buffer.getvalue()
+
+
+# =============================================================================
+# 4.2 Ekspor CSV Telemetri Deret Waktu Petak Lahan (export_plot_telemetry_csv)
+# =============================================================================
+
+
+async def export_plot_telemetry_csv(
+    db: AsyncSession,
+    plot_id: int,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    include_bom: bool = True,
+) -> str:
+    """Export standard agricultural telemetry time-series dataset for a single plot in CSV format.
+
+    Headers:
+    tanggal, hst, ndvi, ndre, ndwi, savi, bsi, suhu_min, suhu_max, curah_hujan, et0
+
+    Compliance:
+    - Standard snake_case agronomic headers
+    - UTF-8 BOM encoding for Microsoft Excel compatibility
+    - Decimal formatting with appropriate precision
+    - Safe handling for 0 telemetry observations and null values
+    """
+    from app.models.division import Division
+    from app.models.estate import Estate
+    from app.models.plot import Plot
+    from app.models.spectral_index import SpectralIndex
+    from app.models.weather_data import WeatherData
+
+    stmt_plot = (
+        select(Plot)
+        .options(selectinload(Plot.division).selectinload(Division.estate))
+        .where(Plot.id == plot_id)
+    )
+    plot = (await db.execute(stmt_plot)).scalar_one_or_none()
+    if not plot:
+        raise ValueError(f"Petak lahan dengan ID {plot_id} tidak ditemukan.")
+
+    today = date.today()
+    if not end_date:
+        end_date = today
+    if not start_date:
+        start_date = end_date - timedelta(days=90)
+
+    estate_id = plot.division.estate_id if (plot.division and plot.division.estate_id) else None
+
+    # Fetch Spectral Index for plot
+    stmt_spec = (
+        select(SpectralIndex)
+        .where(
+            SpectralIndex.plot_id == plot_id,
+            SpectralIndex.observation_date >= start_date,
+            SpectralIndex.observation_date <= end_date,
+        )
+        .order_by(SpectralIndex.observation_date.asc())
+    )
+    spec_records = (await db.execute(stmt_spec)).scalars().all()
+    spec_by_date = {s.observation_date: s for s in spec_records}
+
+    # Fetch Weather Data for Estate
+    weather_by_date = {}
+    if estate_id:
+        stmt_weather = (
+            select(WeatherData)
+            .where(
+                WeatherData.estate_id == estate_id,
+                WeatherData.observation_date >= start_date,
+                WeatherData.observation_date <= end_date,
+            )
+            .order_by(WeatherData.observation_date.asc())
+        )
+        w_records = (await db.execute(stmt_weather)).scalars().all()
+        weather_by_date = {w.observation_date: w for w in w_records}
+
+    all_dates = sorted(set(spec_by_date.keys()).union(set(weather_by_date.keys())))
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        ["tanggal", "hst", "ndvi", "ndre", "ndwi", "savi", "bsi", "suhu_min", "suhu_max", "curah_hujan", "et0"]
+    )
+
+    for obs_date in all_dates:
+        # HST
+        hst_val = ""
+        if plot.planting_date:
+            days_diff = (obs_date - plot.planting_date).days
+            hst_val = str(max(0, days_diff))
+
+        # Satellite indices
+        s = spec_by_date.get(obs_date)
+        ndvi = f"{s.ndvi:.4f}" if (s and s.ndvi is not None) else ""
+        ndre = f"{s.ndre:.4f}" if (s and s.ndre is not None) else ""
+        ndwi = f"{s.ndwi:.4f}" if (s and s.ndwi is not None) else ""
+        savi = f"{s.savi:.4f}" if (s and s.savi is not None) else ""
+        bsi = f"{s.bsi:.4f}" if (s and s.bsi is not None) else ""
+
+        # Weather
+        w = weather_by_date.get(obs_date)
+        tmin = f"{w.temp_min_c:.1f}" if (w and w.temp_min_c is not None) else ""
+        tmax = f"{w.temp_max_c:.1f}" if (w and w.temp_max_c is not None) else ""
+        rain = f"{w.rainfall_mm:.1f}" if (w and w.rainfall_mm is not None) else ""
+        et0 = f"{w.et0_mm:.2f}" if (w and w.et0_mm is not None) else ""
+
+        writer.writerow(
+            [
+                obs_date.isoformat(),
+                hst_val,
+                ndvi,
+                ndre,
+                ndwi,
+                savi,
+                bsi,
+                tmin,
+                tmax,
+                rain,
+                et0,
+            ]
+        )
+
+    content = output.getvalue()
+    if include_bom:
+        return "\ufeff" + content
+    return content
 
 
 async def generate_season_comparison(

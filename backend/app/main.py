@@ -31,6 +31,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 # Include API Router
@@ -40,7 +41,7 @@ app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 @app.get("/", tags=["Root"])
 async def root():
     return {
-        "message": "Selamat datang di API Tani - Platform SaaS Monitoring Pertanian",
+        "message": "Selamat datang di API TANDUR - Platform SaaS Monitoring Pertanian",
         "docs": "/api/docs",
         "health": "/api/health",
         "version": settings.VERSION,

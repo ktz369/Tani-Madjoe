@@ -210,6 +210,8 @@ export interface Plot {
   variety_name?: string | null;
 }
 
+export type PlotResponse = Plot;
+
 export interface PlotCreateRequest {
   division_id?: number;
   variety_id?: number | null;

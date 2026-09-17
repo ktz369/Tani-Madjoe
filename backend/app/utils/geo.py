@@ -73,8 +73,8 @@ def coordinates_from_point(
         return None, None
 
     try:
-        if isinstance(geom, WKTElement):
-            text = str(geom.data)
+        if isinstance(geom, (str, WKTElement)):
+            text = str(geom.data) if hasattr(geom, "data") else str(geom)
             if "POINT" in text.upper():
                 coords = text.replace("POINT", "").replace("(", "").replace(")", "").strip().split()
                 if len(coords) >= 2:
@@ -160,6 +160,11 @@ def polygon_from_geojson(
                 raise ValueError(f"Koordinat ke-{pt_idx + 1} tidak valid: {pt}")
             lng, lat = float(pt[0]), float(pt[1])
             if not (-180.0 <= lng <= 180.0 and -90.0 <= lat <= 90.0):
+                if abs(lat) > 90.0 and abs(lng) <= 90.0:
+                    raise ValueError(
+                        f"Koordinat ({lng}, {lat}) di luar batas koordinat bumi WGS84 (-180..180, -90..90). "
+                        f"Terdeteksi urutan koordinat terbalik: latitude ({lat}) melebihi ±90°, kemungkinan format adalah [lat, lng] bukannya [lng, lat]."
+                    )
                 raise ValueError(
                     f"Koordinat ({lng}, {lat}) di luar batas koordinat bumi WGS84 (-180..180, -90..90)."
                 )
@@ -171,6 +176,11 @@ def polygon_from_geojson(
 
         if len(cleaned_pts) < 4:
             raise ValueError("Cincin poligon tertutup harus memiliki minimal 4 titik (3 titik unik).")
+
+        from app.utils.kml_parser import check_ring_self_intersection
+        self_err = check_ring_self_intersection([list(p) for p in cleaned_pts])
+        if self_err:
+            raise ValueError(f"Cincin poligon ke-{ring_idx + 1} tidak valid: {self_err}")
 
         pts_str = ", ".join(f"{lng} {lat}" for lng, lat in cleaned_pts)
         cleaned_rings_wkt.append(f"({pts_str})")

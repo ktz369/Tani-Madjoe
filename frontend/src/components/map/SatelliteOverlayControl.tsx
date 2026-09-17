@@ -36,7 +36,7 @@ export default function SatelliteOverlayControl({
   const [isOpen, setIsOpen] = useState(true);
 
   return (
-    <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/90 text-xs text-slate-800 transition-all select-none">
+    <div className="bg-white/85 backdrop-blur-[14px] rounded-[3px] shadow-[0_2px_16px_rgba(0,0,0,0.10)] border border-black/[0.08] text-xs text-[var(--ink)] transition-all select-none">
       {/* Header Bar */}
       <div className="p-2.5 flex items-center justify-between gap-2.5">
         <div className="flex items-center gap-2">
@@ -77,7 +77,7 @@ export default function SatelliteOverlayControl({
           >
             <span
               aria-hidden="true"
-              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
                 isEnabled ? "translate-x-4" : "translate-x-0"
               }`}
             />

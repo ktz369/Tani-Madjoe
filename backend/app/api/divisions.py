@@ -85,6 +85,19 @@ async def create_division(
             detail=f"Estate dengan ID {payload.estate_id} tidak ditemukan.",
         )
 
+    # Check for duplicate division name within this estate
+    dup_div = await db.scalar(
+        select(Division).where(
+            Division.estate_id == payload.estate_id,
+            Division.name.ilike(payload.name.strip()),
+        )
+    )
+    if dup_div:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Divisi dengan nama '{payload.name}' sudah terdaftar pada estate ini.",
+        )
+
     division = Division(
         estate_id=payload.estate_id,
         name=payload.name.strip(),
@@ -185,6 +198,12 @@ async def delete_division(
     current_user: User = Depends(get_current_user),
 ):
     """Menghapus entitas divisi."""
+    if current_user.role in ["surveyor"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Akses ditolak: Surveyor tidak memiliki hak untuk menghapus divisi.",
+        )
+
     stmt = select(Division).where(Division.id == division_id)
     result = await db.execute(stmt)
     division = result.scalar_one_or_none()

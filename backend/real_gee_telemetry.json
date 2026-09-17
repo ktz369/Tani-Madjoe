@@ -1,0 +1,130 @@
+{
+  "plot_name": "Bengkok 1",
+  "polygon_vertices": 24,
+  "source": "Google Earth Engine (Live Satellites: Sentinel-2 & Sentinel-1)",
+  "tile_url": "https://earthengine.googleapis.com/v1/projects/earthengine-legacy/maps/a068ed195b3ee8f942fc99989aecec83-2b6a6c31ea5daf9d6fa7d6ad4908facf/tiles/{z}/{x}/{y}",
+  "sentinel_2_observations": [
+    {
+      "date": "2026-09-04",
+      "ndvi": 0.2716,
+      "ndre": 0.1783,
+      "ndwi": -0.1352,
+      "savi": 0.2105,
+      "bsi": 0.1951,
+      "cloud_cover_pct": 23.2
+    },
+    {
+      "date": "2026-09-04",
+      "ndvi": 0.2745,
+      "ndre": 0.1811,
+      "ndwi": -0.1368,
+      "savi": 0.2107,
+      "bsi": 0.188,
+      "cloud_cover_pct": 14.1
+    },
+    {
+      "date": "2026-08-30",
+      "ndvi": 0.2989,
+      "ndre": 0.1761,
+      "ndwi": -0.1474,
+      "savi": 0.2291,
+      "bsi": 0.1785,
+      "cloud_cover_pct": 18.0
+    },
+    {
+      "date": "2026-08-30",
+      "ndvi": 0.2937,
+      "ndre": 0.1747,
+      "ndwi": -0.1454,
+      "savi": 0.2265,
+      "bsi": 0.1791,
+      "cloud_cover_pct": 34.1
+    },
+    {
+      "date": "2026-08-25",
+      "ndvi": 0.3126,
+      "ndre": 0.2086,
+      "ndwi": -0.1114,
+      "savi": 0.2364,
+      "bsi": 0.1648,
+      "cloud_cover_pct": 10.8
+    },
+    {
+      "date": "2026-08-25",
+      "ndvi": 0.3109,
+      "ndre": 0.2066,
+      "ndwi": -0.1123,
+      "savi": 0.2348,
+      "bsi": 0.1619,
+      "cloud_cover_pct": 9.2
+    },
+    {
+      "date": "2026-08-15",
+      "ndvi": 0.4421,
+      "ndre": 0.2935,
+      "ndwi": -0.0435,
+      "savi": 0.3129,
+      "bsi": 0.099,
+      "cloud_cover_pct": 10.2
+    },
+    {
+      "date": "2026-08-15",
+      "ndvi": 0.4478,
+      "ndre": 0.2964,
+      "ndwi": -0.0386,
+      "savi": 0.319,
+      "bsi": 0.0985,
+      "cloud_cover_pct": 26.1
+    },
+    {
+      "date": "2026-08-10",
+      "ndvi": 0.5037,
+      "ndre": 0.3209,
+      "ndwi": 0.0105,
+      "savi": 0.3615,
+      "bsi": 0.0553,
+      "cloud_cover_pct": 18.8
+    },
+    {
+      "date": "2026-08-10",
+      "ndvi": 0.5006,
+      "ndre": 0.3197,
+      "ndwi": 0.0103,
+      "savi": 0.3577,
+      "bsi": 0.0508,
+      "cloud_cover_pct": 14.2
+    }
+  ],
+  "sentinel_1_sar_observations": [
+    {
+      "date": "2026-09-04",
+      "sar_vv_db": -10.67,
+      "sar_vh_db": -20.22
+    },
+    {
+      "date": "2026-08-31",
+      "sar_vv_db": -11.74,
+      "sar_vh_db": -19.94
+    },
+    {
+      "date": "2026-08-28",
+      "sar_vv_db": -10.35,
+      "sar_vh_db": -18.19
+    },
+    {
+      "date": "2026-08-25",
+      "sar_vv_db": -11.43,
+      "sar_vh_db": -17.52
+    },
+    {
+      "date": "2026-08-23",
+      "sar_vv_db": -12.42,
+      "sar_vh_db": -20.9
+    },
+    {
+      "date": "2026-08-19",
+      "sar_vv_db": -12.11,
+      "sar_vh_db": -19.24
+    }
+  ]
+}

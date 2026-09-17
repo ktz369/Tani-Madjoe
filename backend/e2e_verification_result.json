@@ -1,0 +1,327 @@
+{
+  "timestamp": "2026-09-06T17:02:49Z",
+  "overall_success": true,
+  "frontend_routes_tested": 8,
+  "frontend_passed": 8,
+  "backend_endpoints_tested": 27,
+  "backend_passed": 27,
+  "frontend_results": [
+    {
+      "menu": "Beranda / Landing Page",
+      "path": "/",
+      "status": 200,
+      "latency_ms": 18.3,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "menu": "Dashboard Utama Perkebunan",
+      "path": "/dashboard",
+      "status": 200,
+      "latency_ms": 17.1,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "menu": "Peta Interaktif & Citra Satelit",
+      "path": "/peta",
+      "status": 200,
+      "latency_ms": 12.9,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "menu": "Detail Petak & Fenologi Tanaman",
+      "path": "/petak/1",
+      "status": 200,
+      "latency_ms": 106.8,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "menu": "Pusat Laporan & Ekspor Data",
+      "path": "/laporan",
+      "status": 200,
+      "latency_ms": 8.1,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "menu": "Admin - Pendaftaran Petak Baru",
+      "path": "/admin/petak-baru",
+      "status": 200,
+      "latency_ms": 20.8,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "menu": "Admin - Struktur Organisasi",
+      "path": "/admin/organisasi",
+      "status": 200,
+      "latency_ms": 16.6,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "menu": "Admin - Manajemen Varietas Benih",
+      "path": "/admin/varietas",
+      "status": 200,
+      "latency_ms": 11.9,
+      "passed": true,
+      "banned_found": []
+    }
+  ],
+  "backend_results": [
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "menu": "Beranda",
+      "status": 200,
+      "latency_ms": 2.1,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/estates",
+      "menu": "Dashboard/Peta/Admin",
+      "status": 200,
+      "latency_ms": 11.6,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/divisions?estate_id=1",
+      "menu": "Admin Organisasi",
+      "status": 200,
+      "latency_ms": 9.1,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies",
+      "menu": "Admin Organisasi",
+      "status": 200,
+      "latency_ms": 2.7,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/plots?estate_id=1",
+      "menu": "Dashboard/Peta",
+      "status": 200,
+      "latency_ms": 19.5,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/plots/1",
+      "menu": "Detail Petak",
+      "status": 200,
+      "latency_ms": 2.9,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/plots/1/seasons",
+      "menu": "Detail Petak",
+      "status": 200,
+      "latency_ms": 27.4,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/plots/1/spectral-indices",
+      "menu": "Detail Petak/Peta",
+      "status": 200,
+      "latency_ms": 15.8,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/plots/1/crop-water-requirement",
+      "menu": "Detail Petak",
+      "status": 200,
+      "latency_ms": 2.8,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/plots/1/harvest-prediction",
+      "menu": "Detail Petak",
+      "status": 200,
+      "latency_ms": 16.6,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/plots/1/phenology-timeline",
+      "menu": "Detail Petak",
+      "status": 200,
+      "latency_ms": 8.6,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/weather/current?estate_id=1",
+      "menu": "Dashboard",
+      "status": 200,
+      "latency_ms": 3.6,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/weather/forecast?estate_id=1",
+      "menu": "Dashboard",
+      "status": 200,
+      "latency_ms": 3.2,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/alerts?estate_id=1",
+      "menu": "Dashboard/Peta",
+      "status": 200,
+      "latency_ms": 3.0,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/gee/time-series?plot_id=1",
+      "menu": "Peta/Detail Petak",
+      "status": 200,
+      "latency_ms": 14.6,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/reports/history?estate_id=1",
+      "menu": "Laporan",
+      "status": 200,
+      "latency_ms": 2.7,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/plots/1/season-comparison",
+      "menu": "Laporan",
+      "status": 200,
+      "latency_ms": 26.7,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/reports/health?estate_id=1",
+      "menu": "Laporan (PDF)",
+      "status": 200,
+      "latency_ms": 8.4,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/reports/harvest-prediction?estate_id=1",
+      "menu": "Laporan (PDF)",
+      "status": 200,
+      "latency_ms": 31.8,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/reports/water-usage?estate_id=1",
+      "menu": "Laporan (PDF)",
+      "status": 200,
+      "latency_ms": 29.8,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/reports/export-csv?estate_id=1",
+      "menu": "Laporan (CSV)",
+      "status": 200,
+      "latency_ms": 2.7,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/reports/download/1",
+      "menu": "Laporan",
+      "status": 200,
+      "latency_ms": 8.3,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/plots/import-preview",
+      "menu": "Admin Petak Baru",
+      "status": 200,
+      "latency_ms": 2.7,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/plots/batch-import-preview",
+      "menu": "Admin Petak Baru",
+      "status": 200,
+      "latency_ms": 28.2,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/varieties",
+      "menu": "Admin Varietas",
+      "status": 200,
+      "latency_ms": 2.4,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/varieties/1",
+      "menu": "Admin Varietas",
+      "status": 200,
+      "latency_ms": 2.6,
+      "passed": true,
+      "banned_found": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/varieties/1/phases",
+      "menu": "Admin Varietas",
+      "status": 200,
+      "latency_ms": 13.7,
+      "passed": true,
+      "banned_found": []
+    }
+  ],
+  "real_data_audit": {
+    "Nama Petak": true,
+    "Luas Lahan": true,
+    "Umur HST": true,
+    "Status Fase": true,
+    "Lokasi Kebun": true,
+    "Jumlah Verteks Poligon": true
+  }
+}

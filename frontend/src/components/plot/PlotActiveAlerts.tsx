@@ -141,7 +141,7 @@ export default function PlotActiveAlerts({ plotId, plotName }: PlotActiveAlertsP
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5">
+    <div className="bg-white rounded-[3px] border border-black/[0.08] p-6 space-y-5">
       {/* Header & Filter Toggle */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
         <div className="flex items-center gap-2">

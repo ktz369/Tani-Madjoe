@@ -78,12 +78,13 @@ export default function VarietasPage() {
       setLoading(true);
       setError(null);
       const res = await api.get<CropVariety[]>("/varieties");
-      setVarieties(res.data);
+      const varList = Array.isArray(res.data) ? res.data : [];
+      setVarieties(varList);
       if (selectedVariety) {
-        const updated = res.data.find((v) => v.id === selectedVariety.id);
+        const updated = varList.find((v) => v.id === selectedVariety.id);
         if (updated) setSelectedVariety(updated);
-      } else if (res.data.length > 0) {
-        setSelectedVariety(res.data[0]);
+      } else if (varList.length > 0) {
+        setSelectedVariety(varList[0]);
       }
     } catch (err: any) {
       console.error("Gagal memuat varietas:", err);
@@ -214,17 +215,17 @@ export default function VarietasPage() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
+      <div className="min-h-screen bg-[var(--canvas)] pt-[68px] text-[var(--ink)] flex flex-col">
         <Navbar />
 
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 mb-8 border-b border-black/[0.08]">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
+              <h1 className="text-2xl font-bold tracking-tight text-[var(--ink)]">
                 Database Varietas & Fase Fenologi
               </h1>
-              <p className="text-sm text-slate-600 mt-1">
+              <p className="text-[13px] text-[var(--ink-3)] mt-1">
                 Kelola parameter agronomi terstandarisasi skala BBCH/IRRI (Padi) dan Skala V-R (Jagung)
               </p>
             </div>
@@ -233,7 +234,7 @@ export default function VarietasPage() {
                 setVarietyForm({ crop_type: "padi", name: "", cycle_days: 120, t_base: 10.0 });
                 setShowAddVarietyModal(true);
               }}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-sm hover:shadow transition-all"
+              className="inline-flex items-center justify-center gap-2 h-[34px] px-[21px] rounded-[3px] bg-[var(--accent)] text-white text-[13px] font-medium hover:opacity-90 transition-colors"
             >
               <Plus className="w-4 h-4" />
               <span>Tambah Varietas</span>
@@ -242,9 +243,9 @@ export default function VarietasPage() {
 
           {/* Notifications */}
           {error && (
-            <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-xl text-sm text-rose-800 flex items-center justify-between">
+            <div className="mb-6 p-3.5 bg-rose-50 border border-rose-200 rounded-[3px] text-[13px] text-rose-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+                <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
                 <span>{error}</span>
               </div>
               <button onClick={() => setError(null)} className="text-rose-500 hover:text-rose-700">
@@ -254,81 +255,81 @@ export default function VarietasPage() {
           )}
 
           {successMessage && (
-            <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-800 flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+            <div className="mb-6 p-3.5 bg-emerald-50 border border-emerald-200 rounded-[3px] text-[13px] text-emerald-800 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
               <span>{successMessage}</span>
             </div>
           )}
 
           {/* Metrics Overview Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
-                <Sprout className="w-6 h-6" />
+            <div className="bg-white p-5 rounded-[3px] border border-black/[0.08] flex items-center gap-4">
+              <div className="w-10 h-10 rounded-[3px] bg-[var(--field)] text-emerald-700 border border-black/[0.08] flex items-center justify-center font-bold">
+                <Sprout className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs text-slate-500 font-medium">Total Varietas</p>
-                <p className="text-2xl font-bold text-slate-900">{varieties.length}</p>
+                <p className="text-[12px] text-[var(--ink-3)] font-medium">Total Varietas</p>
+                <p className="text-2xl font-bold text-[var(--ink)] tracking-tight">{varieties.length}</p>
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
+            <div className="bg-white p-5 rounded-[3px] border border-black/[0.08] flex items-center gap-4">
+              <div className="w-10 h-10 rounded-[3px] bg-[var(--field)] text-teal-700 border border-black/[0.08] flex items-center justify-center font-bold text-lg">
                 🌾
               </div>
               <div>
-                <p className="text-xs text-slate-500 font-medium">Varietas Padi</p>
-                <p className="text-2xl font-bold text-slate-900">{totalPadi}</p>
+                <p className="text-[12px] text-[var(--ink-3)] font-medium">Varietas Padi</p>
+                <p className="text-2xl font-bold text-[var(--ink)] tracking-tight">{totalPadi}</p>
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+            <div className="bg-white p-5 rounded-[3px] border border-black/[0.08] flex items-center gap-4">
+              <div className="w-10 h-10 rounded-[3px] bg-[var(--field)] text-amber-700 border border-black/[0.08] flex items-center justify-center font-bold text-lg">
                 🌽
               </div>
               <div>
-                <p className="text-xs text-slate-500 font-medium">Varietas Jagung</p>
-                <p className="text-2xl font-bold text-slate-900">{totalJagung}</p>
+                <p className="text-[12px] text-[var(--ink-3)] font-medium">Varietas Jagung</p>
+                <p className="text-2xl font-bold text-[var(--ink)] tracking-tight">{totalJagung}</p>
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
-                <Layers className="w-6 h-6" />
+            <div className="bg-white p-5 rounded-[3px] border border-black/[0.08] flex items-center gap-4">
+              <div className="w-10 h-10 rounded-[3px] bg-[var(--field)] text-indigo-700 border border-black/[0.08] flex items-center justify-center font-bold">
+                <Layers className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs text-slate-500 font-medium">Fase Fenologi Terdaftar</p>
-                <p className="text-2xl font-bold text-slate-900">{totalPhases}</p>
+                <p className="text-[12px] text-[var(--ink-3)] font-medium">Fase Fenologi Terdaftar</p>
+                <p className="text-2xl font-bold text-[var(--ink)] tracking-tight">{totalPhases}</p>
               </div>
             </div>
           </div>
 
           {/* Main Content Layout: Left list of varieties, Right detail & phases */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Left Column: Varieties List (5 Cols) */}
-            <div className="lg:col-span-5 flex flex-col gap-4">
+            <div className="lg:col-span-5 flex flex-col gap-3">
               {/* Filter & Search Bar */}
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-3">
+              <div className="bg-white p-3 rounded-[3px] border border-black/[0.08] flex flex-col sm:flex-row gap-2.5">
                 <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Search className="w-4 h-4 text-[var(--ink-3)] absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Cari varietas..."
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full h-[34px] pl-9 pr-3 text-[13px] bg-[var(--field)] border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                   />
                 </div>
 
-                <div className="flex gap-1.5 p-1 bg-slate-100 rounded-xl">
+                <div className="flex gap-1 p-1 bg-[var(--field)] rounded-[3px] border border-black/[0.08]">
                   {["semua", "padi", "jagung"].map((t) => (
                     <button
                       key={t}
                       onClick={() => setCropTypeFilter(t)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all ${
+                      className={`px-2.5 py-1 rounded-[2px] text-[12px] capitalize transition-colors ${
                         cropTypeFilter === t
-                          ? "bg-white text-emerald-800 shadow-sm"
-                          : "text-slate-600 hover:text-slate-900"
+                          ? "bg-white text-[var(--ink)] font-semibold border border-black/[0.08]"
+                          : "text-[var(--ink-3)] hover:text-[var(--ink)]"
                       }`}
                     >
                       {t === "semua" ? "Semua" : t === "padi" ? "🌾 Padi" : "🌽 Jagung"}
@@ -338,15 +339,15 @@ export default function VarietasPage() {
               </div>
 
               {/* Varieties Cards */}
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2.5">
                 {loading ? (
-                  <div className="p-8 text-center text-slate-500 bg-white rounded-2xl border border-slate-200">
-                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-emerald-600 border-t-transparent mx-auto mb-2"></div>
-                    <p className="text-sm">Memuat daftar varietas...</p>
+                  <div className="p-8 text-center text-[var(--ink-3)] bg-white rounded-[3px] border border-black/[0.08]">
+                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-[var(--accent)] border-t-transparent mx-auto mb-2"></div>
+                    <p className="text-[13px]">Memuat daftar varietas...</p>
                   </div>
                 ) : filteredVarieties.length === 0 ? (
-                  <div className="p-8 text-center text-slate-500 bg-white rounded-2xl border border-slate-200">
-                    <p className="text-sm font-medium">Tidak ada varietas ditemukan.</p>
+                  <div className="p-8 text-center text-[var(--ink-3)] bg-white rounded-[3px] border border-black/[0.08]">
+                    <p className="text-[13px] font-medium">Tidak ada varietas ditemukan.</p>
                   </div>
                 ) : (
                   filteredVarieties.map((v) => {
@@ -356,10 +357,10 @@ export default function VarietasPage() {
                       <div
                         key={v.id}
                         onClick={() => setSelectedVariety(v)}
-                        className={`p-5 rounded-2xl border transition-all cursor-pointer text-left relative ${
+                        className={`p-4 rounded-[3px] border transition-colors cursor-pointer text-left relative ${
                           isSelected
-                            ? "bg-emerald-50/50 border-emerald-500 shadow-md ring-1 ring-emerald-500"
-                            : "bg-white border-slate-200 hover:border-slate-300 shadow-sm hover:shadow"
+                            ? "bg-emerald-50/40 border-[var(--accent)]"
+                            : "bg-white border-black/[0.08] hover:border-black/[0.2]"
                         }`}
                       >
                         <div className="flex items-start justify-between">
@@ -367,31 +368,31 @@ export default function VarietasPage() {
                             <span className="text-2xl">{isPadi ? "🌾" : "🌽"}</span>
                             <div>
                               <div className="flex items-center gap-2">
-                                <h3 className="font-bold text-slate-900 text-base">{v.name}</h3>
+                                <h3 className="font-bold text-[var(--ink)] text-[14px]">{v.name}</h3>
                                 <span
-                                  className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                                  className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded-[2px] ${
                                     isPadi
-                                      ? "bg-teal-100 text-teal-800 border border-teal-200"
-                                      : "bg-amber-100 text-amber-800 border border-amber-200"
+                                      ? "bg-teal-50 text-teal-800 border border-teal-200"
+                                      : "bg-amber-50 text-amber-800 border border-amber-200"
                                   }`}
                                 >
                                   {v.crop_type}
                                 </span>
                               </div>
-                              <p className="text-xs text-slate-500 mt-1 flex items-center gap-3">
+                              <p className="text-[12px] text-[var(--ink-3)] mt-1 flex items-center gap-3">
                                 <span>⏱️ Umur: {v.cycle_days} HST</span>
                                 <span>🌡️ T-base: {v.t_base}°C</span>
                               </p>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs font-semibold px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-medium px-2 py-0.5 bg-[var(--field)] text-[var(--ink-2)] rounded-[2px] border border-black/[0.08]">
                               {v.phases?.length || 0} Fase
                             </span>
                             <ChevronRight
-                              className={`w-5 h-5 ml-1 transition-transform ${
-                                isSelected ? "text-emerald-600 translate-x-0.5" : "text-slate-300"
+                              className={`w-4 h-4 ml-1 transition-transform ${
+                                isSelected ? "text-[var(--accent)] translate-x-0.5" : "text-[var(--ink-3)]"
                               }`}
                             />
                           </div>
@@ -406,17 +407,17 @@ export default function VarietasPage() {
             {/* Right Column: Selected Variety Detail & Phenology Phases (7 Cols) */}
             <div className="lg:col-span-7">
               {selectedVariety ? (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                <div className="bg-white rounded-[3px] border border-black/[0.08] overflow-hidden flex flex-col">
                   {/* Top Bar of Selected Variety */}
-                  <div className="p-6 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="p-5 border-b border-black/[0.08] bg-[var(--canvas)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-2">
-                        <h2 className="text-xl font-bold text-slate-900">{selectedVariety.name}</h2>
-                        <span className="text-xs font-bold uppercase px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                        <h2 className="text-lg font-bold text-[var(--ink)]">{selectedVariety.name}</h2>
+                        <span className="text-[11px] font-semibold uppercase px-2 py-0.5 rounded-[2px] bg-emerald-100 text-emerald-800 border border-emerald-200">
                           {selectedVariety.crop_type}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-1">
+                      <p className="text-[12px] text-[var(--ink-3)] mt-1">
                         Siklus fisiologis {selectedVariety.cycle_days} Hari Setelah Tanam (HST) | Suhu dasar pertumbuhan: {selectedVariety.t_base}°C
                       </p>
                     </div>
@@ -432,7 +433,7 @@ export default function VarietasPage() {
                           });
                           setShowEditVarietyModal(true);
                         }}
-                        className="p-2 text-slate-600 hover:text-emerald-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors"
+                        className="p-1.5 text-[var(--ink-2)] hover:text-[var(--ink)] bg-white hover:bg-[var(--hover)] border border-black/[0.08] rounded-[3px] transition-colors"
                         title="Edit Varietas"
                       >
                         <Edit2 className="w-4 h-4" />
@@ -442,14 +443,14 @@ export default function VarietasPage() {
                           setVarietyToDelete(selectedVariety);
                           setShowDeleteConfirmModal(true);
                         }}
-                        className="p-2 text-rose-600 hover:text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 rounded-xl transition-colors"
+                        className="p-1.5 text-rose-600 hover:text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 rounded-[3px] transition-colors"
                         title="Hapus Varietas"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => setShowAddPhaseModal(true)}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs shadow-sm transition-all"
+                        className="inline-flex items-center gap-1.5 h-[34px] px-[16px] rounded-[3px] bg-[var(--accent)] text-white font-medium text-[12.5px] hover:opacity-90 transition-colors"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Tambah Fase</span>
@@ -458,73 +459,73 @@ export default function VarietasPage() {
                   </div>
 
                   {/* Phenology Phases Table */}
-                  <div className="p-6">
+                  <div className="p-5">
                     <div className="flex items-center justify-between mb-4">
                       <div>
-                        <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                        <h3 className="font-bold text-[var(--ink)] text-[14px] flex items-center gap-2">
                           <Layers className="w-4 h-4 text-emerald-600" />
                           <span>Tahapan Skala Fenologi</span>
                         </h3>
-                        <p className="text-xs text-slate-500 mt-0.5">
+                        <p className="text-[12px] text-[var(--ink-3)] mt-0.5">
                           Parameter ambang batas remote sensing dan agrometeorologi per fase
                         </p>
                       </div>
-                      <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
+                      <span className="text-[11px] font-medium text-[var(--ink-2)] bg-[var(--field)] border border-black/[0.08] px-2.5 py-1 rounded-[3px]">
                         Total {selectedVariety.phases?.length || 0} Fase
                       </span>
                     </div>
 
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
+                    <div className="overflow-x-auto border border-black/[0.08] rounded-[3px]">
+                      <table className="w-full text-left text-[12.5px]">
                         <thead>
-                          <tr className="border-b border-slate-200 bg-slate-50/75 text-slate-600 font-semibold">
-                            <th className="py-3 px-3">Kode</th>
-                            <th className="py-3 px-3">Nama Fase</th>
-                            <th className="py-3 px-2">HST</th>
-                            <th className="py-3 px-2">NDVI Ekspektasi</th>
-                            <th className="py-3 px-2">NDRE Min</th>
-                            <th className="py-3 px-2">Kc</th>
-                            <th className="py-3 px-2">GDD Target</th>
+                          <tr className="border-b border-black/[0.08] bg-[var(--canvas)] text-[11px] uppercase tracking-[0.04em] text-[var(--ink-3)] font-semibold">
+                            <th className="py-[11px] px-[16px]">Kode</th>
+                            <th className="py-[11px] px-[16px]">Nama Fase</th>
+                            <th className="py-[11px] px-[13px]">HST</th>
+                            <th className="py-[11px] px-[13px]">NDVI Ekspektasi</th>
+                            <th className="py-[11px] px-[13px]">NDRE Min</th>
+                            <th className="py-[11px] px-[13px]">Kc</th>
+                            <th className="py-[11px] px-[13px]">GDD Target</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                        <tbody className="divide-y divide-black/[0.08] font-medium text-[var(--ink-2)]">
                           {selectedVariety.phases && selectedVariety.phases.length > 0 ? (
                             selectedVariety.phases.map((phase) => (
-                              <tr key={phase.id} className="hover:bg-slate-50/50 transition-colors">
-                                <td className="py-3 px-3 font-bold text-slate-900">
-                                  <span className="px-2 py-0.5 rounded bg-slate-100 text-emerald-800 font-mono">
+                              <tr key={phase.id} className="hover:bg-[var(--field)] transition-colors">
+                                <td className="py-[13px] px-[16px] font-bold text-[var(--ink)]">
+                                  <span className="px-2 py-0.5 rounded-[2px] bg-[var(--field)] text-emerald-800 font-mono border border-black/[0.08]">
                                     {phase.phase_code}
                                   </span>
                                 </td>
-                                <td className="py-3 px-3">
-                                  <span className="font-semibold text-slate-900 block">{phase.phase_name}</span>
+                                <td className="py-[13px] px-[16px]">
+                                  <span className="font-semibold text-[var(--ink)] block">{phase.phase_name}</span>
                                 </td>
-                                <td className="py-3 px-2 whitespace-nowrap">
-                                  <span className="text-slate-600">
+                                <td className="py-[13px] px-[13px] whitespace-nowrap">
+                                  <span className="text-[var(--ink-2)]">
                                     {phase.hst_start === phase.hst_end
                                       ? `${phase.hst_start}`
                                       : `${phase.hst_start} - ${phase.hst_end}`}
                                   </span>
                                 </td>
-                                <td className="py-3 px-2 whitespace-nowrap">
+                                <td className="py-[13px] px-[13px] whitespace-nowrap">
                                   <span className="text-emerald-700 font-mono">
                                     {phase.ndvi_expected_min.toFixed(2)} - {phase.ndvi_expected_max.toFixed(2)}
                                   </span>
                                 </td>
-                                <td className="py-3 px-2 whitespace-nowrap font-mono text-blue-700">
+                                <td className="py-[13px] px-[13px] whitespace-nowrap font-mono text-blue-700">
                                   ≥ {phase.ndre_threshold.toFixed(2)}
                                 </td>
-                                <td className="py-3 px-2 font-mono font-bold text-slate-800">
+                                <td className="py-[13px] px-[13px] font-mono font-bold text-[var(--ink)]">
                                   {phase.kc_value.toFixed(2)}
                                 </td>
-                                <td className="py-3 px-2 font-mono font-bold text-amber-700 whitespace-nowrap">
+                                <td className="py-[13px] px-[13px] font-mono font-bold text-amber-700 whitespace-nowrap">
                                   {phase.gdd_target} °C·h
                                 </td>
                               </tr>
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={7} className="py-8 text-center text-slate-500">
+                              <td colSpan={7} className="py-8 text-center text-[var(--ink-3)]">
                                 Belum ada fase fenologi yang terdaftar untuk varietas ini.
                               </td>
                             </tr>
@@ -534,24 +535,24 @@ export default function VarietasPage() {
                     </div>
 
                     {/* Explanatory Guide Box */}
-                    <div className="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1.5">
-                      <p className="font-semibold text-slate-800 flex items-center gap-1.5">
+                    <div className="mt-5 p-4 rounded-[3px] bg-[var(--field)] border border-black/[0.08] text-[12px] text-[var(--ink-2)] space-y-1.5">
+                      <p className="font-semibold text-[var(--ink)] flex items-center gap-1.5">
                         <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
                         <span>Keterangan Parameter Fenologi:</span>
                       </p>
-                      <ul className="list-disc list-inside space-y-1 text-slate-600">
-                        <li><span className="font-medium text-slate-700">Kc (Koefisien Tanaman):</span> Faktor pengali untuk menghitung kebutuhan evapotranspirasi air riil tanaman (ETc = ET₀ × Kc).</li>
-                        <li><span className="font-medium text-slate-700">NDRE Threshold:</span> Ambang batas klorofil daun untuk deteksi dini defisiensi pupuk Nitrogen (Urea).</li>
-                        <li><span className="font-medium text-slate-700">GDD Target:</span> Akumulasi suhu panas (Growing Degree Days) untuk menentukan tanggal transisi fase secara otomatis.</li>
+                      <ul className="list-disc list-inside space-y-1 text-[var(--ink-2)]">
+                        <li><span className="font-medium text-[var(--ink)]">Kc (Koefisien Tanaman):</span> Faktor pengali untuk menghitung kebutuhan evapotranspirasi air riil tanaman (ETc = ET₀ × Kc).</li>
+                        <li><span className="font-medium text-[var(--ink)]">NDRE Threshold:</span> Ambang batas klorofil daun untuk deteksi dini defisiensi pupuk Nitrogen (Urea).</li>
+                        <li><span className="font-medium text-[var(--ink)]">GDD Target:</span> Akumulasi suhu panas (Growing Degree Days) untuk menentukan tanggal transisi fase secara otomatis.</li>
                       </ul>
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="h-full min-h-[300px] flex flex-col items-center justify-center p-8 bg-white rounded-2xl border border-slate-200 text-center">
-                  <Sprout className="w-12 h-12 text-slate-300 mb-3" />
-                  <p className="font-semibold text-slate-700 text-sm">Pilih salah satu varietas tanaman</p>
-                  <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                <div className="h-full min-h-[300px] flex flex-col items-center justify-center p-8 bg-white rounded-[3px] border border-black/[0.08] text-center">
+                  <Sprout className="w-12 h-12 text-[var(--ink-3)] mb-3" />
+                  <p className="font-semibold text-[var(--ink)] text-sm">Pilih salah satu varietas tanaman</p>
+                  <p className="text-[12px] text-[var(--ink-3)] mt-1 max-w-sm">
                     Pilih varietas dari daftar di sebelah kiri untuk melihat rincian parameter agronomi dan fase pertumbuhannya.
                   </p>
                 </div>
@@ -562,22 +563,25 @@ export default function VarietasPage() {
 
         {/* Modal: Tambah Varietas Baru */}
         {showAddVarietyModal && (
-          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200 animate-in fade-in zoom-in duration-150">
-              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-                <h3 className="text-lg font-bold text-slate-900">Tambah Varietas Baru</h3>
-                <button onClick={() => setShowAddVarietyModal(false)} className="text-slate-400 hover:text-slate-600">
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-[3px] max-w-md w-full p-6 border border-black/[0.08]">
+              <div className="flex items-center justify-between pb-4 mb-4 border-b border-black/[0.08]">
+                <h3 className="text-[15px] font-bold text-[var(--ink)]">Tambah Varietas Baru</h3>
+                <button
+                  onClick={() => setShowAddVarietyModal(false)}
+                  className="p-1 rounded-[3px] text-[var(--ink-3)] hover:text-[var(--ink)] hover:bg-[var(--hover)] transition-colors"
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleCreateVariety} className="mt-4 space-y-4">
+              <form onSubmit={handleCreateVariety} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Jenis Tanaman</label>
+                  <label className="block text-[12px] font-semibold text-[var(--ink-2)] mb-1">Jenis Tanaman</label>
                   <select
                     value={varietyForm.crop_type}
                     onChange={(e) => setVarietyForm({ ...varietyForm, crop_type: e.target.value as "padi" | "jagung" })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full h-[34px] px-[13px] text-[13px] bg-white border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                   >
                     <option value="padi">🌾 Padi (Oryza sativa)</option>
                     <option value="jagung">🌽 Jagung (Zea mays)</option>
@@ -585,20 +589,20 @@ export default function VarietasPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Nama Varietas</label>
+                  <label className="block text-[12px] font-semibold text-[var(--ink-2)] mb-1">Nama Varietas</label>
                   <input
                     type="text"
                     required
                     value={varietyForm.name}
                     onChange={(e) => setVarietyForm({ ...varietyForm, name: e.target.value })}
                     placeholder="cth: Inpari 32, Ciherang, BISI 18"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full h-[34px] px-[13px] text-[13px] bg-white border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Umur Siklus (HST)</label>
+                    <label className="block text-[12px] font-semibold text-[var(--ink-2)] mb-1">Umur Siklus (HST)</label>
                     <input
                       type="number"
                       required
@@ -606,34 +610,34 @@ export default function VarietasPage() {
                       max={300}
                       value={varietyForm.cycle_days}
                       onChange={(e) => setVarietyForm({ ...varietyForm, cycle_days: parseInt(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full h-[34px] px-[13px] text-[13px] bg-white border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Suhu Dasar T-base (°C)</label>
+                    <label className="block text-[12px] font-semibold text-[var(--ink-2)] mb-1">Suhu Dasar T-base (°C)</label>
                     <input
                       type="number"
                       step="0.5"
                       required
                       value={varietyForm.t_base}
                       onChange={(e) => setVarietyForm({ ...varietyForm, t_base: parseFloat(e.target.value) || 10.0 })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full h-[34px] px-[13px] text-[13px] bg-white border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                     />
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 flex justify-end gap-2">
+                <div className="pt-4 border-t border-black/[0.08] flex justify-end gap-2.5">
                   <button
                     type="button"
                     onClick={() => setShowAddVarietyModal(false)}
-                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-medium"
+                    className="h-[34px] px-[21px] rounded-[3px] border border-black/[0.08] bg-white text-[var(--ink-2)] text-[13px] hover:bg-[var(--hover)] transition-colors"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm disabled:opacity-50"
+                    className="h-[34px] px-[21px] rounded-[3px] bg-[var(--accent)] text-white text-[13px] font-medium hover:opacity-90 transition-colors disabled:opacity-50"
                   >
                     {submitting ? "Menyimpan..." : "Simpan Varietas"}
                   </button>
@@ -645,22 +649,25 @@ export default function VarietasPage() {
 
         {/* Modal: Edit Varietas */}
         {showEditVarietyModal && selectedVariety && (
-          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200 animate-in fade-in zoom-in duration-150">
-              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-                <h3 className="text-lg font-bold text-slate-900">Edit Varietas</h3>
-                <button onClick={() => setShowEditVarietyModal(false)} className="text-slate-400 hover:text-slate-600">
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-[3px] max-w-md w-full p-6 border border-black/[0.08]">
+              <div className="flex items-center justify-between pb-4 mb-4 border-b border-black/[0.08]">
+                <h3 className="text-[15px] font-bold text-[var(--ink)]">Edit Varietas</h3>
+                <button
+                  onClick={() => setShowEditVarietyModal(false)}
+                  className="p-1 rounded-[3px] text-[var(--ink-3)] hover:text-[var(--ink)] hover:bg-[var(--hover)] transition-colors"
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleUpdateVariety} className="mt-4 space-y-4">
+              <form onSubmit={handleUpdateVariety} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Jenis Tanaman</label>
+                  <label className="block text-[12px] font-semibold text-[var(--ink-2)] mb-1">Jenis Tanaman</label>
                   <select
                     value={varietyForm.crop_type}
                     onChange={(e) => setVarietyForm({ ...varietyForm, crop_type: e.target.value as "padi" | "jagung" })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full h-[34px] px-[13px] text-[13px] bg-white border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                   >
                     <option value="padi">🌾 Padi (Oryza sativa)</option>
                     <option value="jagung">🌽 Jagung (Zea mays)</option>
@@ -668,19 +675,19 @@ export default function VarietasPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Nama Varietas</label>
+                  <label className="block text-[12px] font-semibold text-[var(--ink-2)] mb-1">Nama Varietas</label>
                   <input
                     type="text"
                     required
                     value={varietyForm.name}
                     onChange={(e) => setVarietyForm({ ...varietyForm, name: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full h-[34px] px-[13px] text-[13px] bg-white border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Umur Siklus (HST)</label>
+                    <label className="block text-[12px] font-semibold text-[var(--ink-2)] mb-1">Umur Siklus (HST)</label>
                     <input
                       type="number"
                       required
@@ -688,34 +695,34 @@ export default function VarietasPage() {
                       max={300}
                       value={varietyForm.cycle_days}
                       onChange={(e) => setVarietyForm({ ...varietyForm, cycle_days: parseInt(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full h-[34px] px-[13px] text-[13px] bg-white border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Suhu Dasar T-base (°C)</label>
+                    <label className="block text-[12px] font-semibold text-[var(--ink-2)] mb-1">Suhu Dasar T-base (°C)</label>
                     <input
                       type="number"
                       step="0.5"
                       required
                       value={varietyForm.t_base}
                       onChange={(e) => setVarietyForm({ ...varietyForm, t_base: parseFloat(e.target.value) || 10.0 })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full h-[34px] px-[13px] text-[13px] bg-white border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                     />
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 flex justify-end gap-2">
+                <div className="pt-4 border-t border-black/[0.08] flex justify-end gap-2.5">
                   <button
                     type="button"
                     onClick={() => setShowEditVarietyModal(false)}
-                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-medium"
+                    className="h-[34px] px-[21px] rounded-[3px] border border-black/[0.08] bg-white text-[var(--ink-2)] text-[13px] hover:bg-[var(--hover)] transition-colors"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm disabled:opacity-50"
+                    className="h-[34px] px-[21px] rounded-[3px] bg-[var(--accent)] text-white text-[13px] font-medium hover:opacity-90 transition-colors disabled:opacity-50"
                   >
                     {submitting ? "Menyimpan..." : "Perbarui Varietas"}
                   </button>
@@ -727,119 +734,122 @@ export default function VarietasPage() {
 
         {/* Modal: Tambah Fase Fenologi Baru */}
         {showAddPhaseModal && selectedVariety && (
-          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 border border-slate-200 animate-in fade-in zoom-in duration-150">
-              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-[3px] max-w-lg w-full p-6 border border-black/[0.08]">
+              <div className="flex items-center justify-between pb-4 mb-4 border-b border-black/[0.08]">
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900">Tambah Fase Fenologi</h3>
-                  <p className="text-xs text-slate-500">Varietas: {selectedVariety.name}</p>
+                  <h3 className="text-[15px] font-bold text-[var(--ink)]">Tambah Fase Fenologi</h3>
+                  <p className="text-[12px] text-[var(--ink-3)]">Varietas: {selectedVariety.name}</p>
                 </div>
-                <button onClick={() => setShowAddPhaseModal(false)} className="text-slate-400 hover:text-slate-600">
+                <button
+                  onClick={() => setShowAddPhaseModal(false)}
+                  className="p-1 rounded-[3px] text-[var(--ink-3)] hover:text-[var(--ink)] hover:bg-[var(--hover)] transition-colors"
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleCreatePhase} className="mt-4 space-y-3.5">
+              <form onSubmit={handleCreatePhase} className="space-y-3.5">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Kode Fase</label>
+                    <label className="block text-[12px] font-semibold text-[var(--ink-2)] mb-1">Kode Fase</label>
                     <input
                       type="text"
                       required
                       placeholder="cth: V1, V6-V8, R1"
                       value={phaseForm.phase_code}
                       onChange={(e) => setPhaseForm({ ...phaseForm, phase_code: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full h-[34px] px-[13px] text-[13px] bg-white border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Target GDD (°C·hari)</label>
+                    <label className="block text-[12px] font-semibold text-[var(--ink-2)] mb-1">Target GDD (°C·hari)</label>
                     <input
                       type="number"
                       required
                       step="1"
                       value={phaseForm.gdd_target}
                       onChange={(e) => setPhaseForm({ ...phaseForm, gdd_target: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full h-[34px] px-[13px] text-[13px] bg-white border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Nama Deskriptif Fase</label>
+                  <label className="block text-[12px] font-semibold text-[var(--ink-2)] mb-1">Nama Deskriptif Fase</label>
                   <input
                     type="text"
                     required
                     placeholder="cth: Pertunasan / Anakan Aktif (Tillering)"
                     value={phaseForm.phase_name}
                     onChange={(e) => setPhaseForm({ ...phaseForm, phase_name: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full h-[34px] px-[13px] text-[13px] bg-white border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Mulai (HST)</label>
+                    <label className="block text-[12px] font-semibold text-[var(--ink-2)] mb-1">Mulai (HST)</label>
                     <input
                       type="number"
                       required
                       min={0}
                       value={phaseForm.hst_start}
                       onChange={(e) => setPhaseForm({ ...phaseForm, hst_start: parseInt(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full h-[34px] px-[13px] text-[13px] bg-white border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Selesai (HST)</label>
+                    <label className="block text-[12px] font-semibold text-[var(--ink-2)] mb-1">Selesai (HST)</label>
                     <input
                       type="number"
                       required
                       min={0}
                       value={phaseForm.hst_end}
                       onChange={(e) => setPhaseForm({ ...phaseForm, hst_end: parseInt(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full h-[34px] px-[13px] text-[13px] bg-white border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">NDVI Min</label>
+                    <label className="block text-[12px] font-semibold text-[var(--ink-2)] mb-1">NDVI Min</label>
                     <input
                       type="number"
                       step="0.01"
                       required
                       value={phaseForm.ndvi_expected_min}
                       onChange={(e) => setPhaseForm({ ...phaseForm, ndvi_expected_min: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full h-[34px] px-[13px] text-[13px] bg-white border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">NDVI Max</label>
+                    <label className="block text-[12px] font-semibold text-[var(--ink-2)] mb-1">NDVI Max</label>
                     <input
                       type="number"
                       step="0.01"
                       required
                       value={phaseForm.ndvi_expected_max}
                       onChange={(e) => setPhaseForm({ ...phaseForm, ndvi_expected_max: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full h-[34px] px-[13px] text-[13px] bg-white border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">NDRE Ambang</label>
+                    <label className="block text-[12px] font-semibold text-[var(--ink-2)] mb-1">NDRE Ambang</label>
                     <input
                       type="number"
                       step="0.01"
                       required
                       value={phaseForm.ndre_threshold}
                       onChange={(e) => setPhaseForm({ ...phaseForm, ndre_threshold: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full h-[34px] px-[13px] text-[13px] bg-white border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Koefisien Kc Tanaman</label>
+                  <label className="block text-[12px] font-semibold text-[var(--ink-2)] mb-1">Koefisien Kc Tanaman</label>
                   <input
                     type="number"
                     step="0.05"
@@ -847,22 +857,22 @@ export default function VarietasPage() {
                     required
                     value={phaseForm.kc_value}
                     onChange={(e) => setPhaseForm({ ...phaseForm, kc_value: parseFloat(e.target.value) || 1.0 })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full h-[34px] px-[13px] text-[13px] bg-white border border-black/[0.08] rounded-[3px] text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
                   />
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 flex justify-end gap-2">
+                <div className="pt-4 border-t border-black/[0.08] flex justify-end gap-2.5">
                   <button
                     type="button"
                     onClick={() => setShowAddPhaseModal(false)}
-                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-medium"
+                    className="h-[34px] px-[21px] rounded-[3px] border border-black/[0.08] bg-white text-[var(--ink-2)] text-[13px] hover:bg-[var(--hover)] transition-colors"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm disabled:opacity-50"
+                    className="h-[34px] px-[21px] rounded-[3px] bg-[var(--accent)] text-white text-[13px] font-medium hover:opacity-90 transition-colors disabled:opacity-50"
                   >
                     {submitting ? "Menyimpan..." : "Simpan Fase"}
                   </button>
@@ -874,21 +884,21 @@ export default function VarietasPage() {
 
         {/* Modal: Konfirmasi Hapus Varietas */}
         {showDeleteConfirmModal && varietyToDelete && (
-          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 border border-slate-200 animate-in fade-in zoom-in duration-150">
-              <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mb-4 mx-auto">
-                <AlertCircle className="w-6 h-6" />
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-[3px] max-w-sm w-full p-6 border border-black/[0.08]">
+              <div className="w-10 h-10 rounded-[3px] bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mb-4 mx-auto">
+                <AlertCircle className="w-5 h-5" />
               </div>
-              <h3 className="text-base font-bold text-slate-900 text-center">Hapus Varietas?</h3>
-              <p className="text-xs text-slate-600 text-center mt-2">
-                Apakah Anda yakin ingin menghapus varietas <strong className="text-slate-800">{varietyToDelete.name}</strong>? Seluruh data fase fenologi yang terikat juga akan terhapus.
+              <h3 className="text-[15px] font-bold text-[var(--ink)] text-center">Hapus Varietas?</h3>
+              <p className="text-[12.5px] text-[var(--ink-2)] text-center mt-2">
+                Apakah Anda yakin ingin menghapus varietas <strong className="text-[var(--ink)]">{varietyToDelete.name}</strong>? Seluruh data fase fenologi yang terikat juga akan terhapus.
               </p>
 
-              <div className="mt-6 flex justify-end gap-2">
+              <div className="mt-6 flex justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setShowDeleteConfirmModal(false)}
-                  className="w-full px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-medium"
+                  className="w-full h-[34px] px-[21px] rounded-[3px] border border-black/[0.08] bg-white text-[var(--ink-2)] text-[13px] hover:bg-[var(--hover)] transition-colors"
                 >
                   Batal
                 </button>
@@ -896,7 +906,7 @@ export default function VarietasPage() {
                   type="button"
                   onClick={handleDeleteVariety}
                   disabled={submitting}
-                  className="w-full px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold shadow-sm disabled:opacity-50"
+                  className="w-full h-[34px] px-[21px] rounded-[3px] bg-rose-600 hover:bg-rose-700 text-white text-[13px] font-medium transition-colors disabled:opacity-50"
                 >
                   {submitting ? "Menghapus..." : "Ya, Hapus"}
                 </button>
