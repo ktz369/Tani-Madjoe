@@ -68,12 +68,12 @@ def upgrade() -> None:
     op.create_index(op.f("ix_plots_crop_type"), "plots", ["crop_type"], unique=False)
 
     # Spatial index using GiST
-    op.create_index(
-        "idx_plots_polygon",
-        "plots",
-        ["polygon"],
-        unique=False,
-        postgresql_using="gist",
+    # NOTE (deploy patch 2026-09-18): geoalchemy2 auto-creates the spatial index
+    # for the geometry column during op.create_table, so a plain op.create_index
+    # here raises DuplicateTableError (relation "idx_plots_polygon" already exists).
+    # Guarded with IF NOT EXISTS so it works on both paths.
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS idx_plots_polygon ON plots USING gist (polygon)"
     )
 
     # 2. Seed initial demo plots for Estate Riau Permai (Estate 1)
@@ -97,7 +97,7 @@ def upgrade() -> None:
                 12.85, CURRENT_DATE - INTERVAL '45 days', 'jagung', 'Inisiasi Pembungaan (V12-VT)', 45, now()
             ),
             (
-                4, 2, 5, 'Petak B2 - Bisi Makmur',
+                4, 2, 3, 'Petak B2 - Bisi Makmur',
                 ST_SetSRID(ST_GeomFromGeoJSON('{"type":"Polygon","coordinates":[[[101.8540,0.5550],[101.8575,0.5550],[101.8575,0.5580],[101.8540,0.5580],[101.8540,0.5550]]]}'), 4326),
                 12.85, CURRENT_DATE - INTERVAL '20 days', 'jagung', 'Vegetatif Awal (V3-V6)', 20, now()
             )
@@ -108,7 +108,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("idx_plots_polygon", table_name="plots", postgresql_using="gist")
+    op.execute("DROP INDEX IF EXISTS idx_plots_polygon")
     op.drop_index(op.f("ix_plots_crop_type"), table_name="plots")
     op.drop_index(op.f("ix_plots_name"), table_name="plots")
     op.drop_index(op.f("ix_plots_variety_id"), table_name="plots")

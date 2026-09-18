@@ -250,7 +250,10 @@ async def _handle_create_plot(
 
         # Baseline spectral index observation (Wave 7 / Ticket 06)
         try:
-            from datetime import date
+            # NOTE (deploy patch 2026-09-18): the inner `from datetime import date`
+            # made `date` a function-local name, so the earlier `date.today()`
+            # (line ~190) raised UnboundLocalError. `date` is already imported at
+            # module level, so use it directly.
             obs_today = date.today()
             baseline_spec = SpectralIndex(
                 plot_id=plot.id,
@@ -1191,7 +1194,7 @@ async def get_estate_plots_summary(
         .join(Division, Plot.division_id == Division.id)
         .where(Division.estate_id == estate_id)
         .options(
-            selectinload(Plot.division),
+            selectinload(Plot.division).selectinload(Division.estate).selectinload(Estate.company),
             selectinload(Plot.variety).selectinload(CropVariety.phases),
         )
     )
