@@ -227,7 +227,7 @@ export interface SARTelemetryResponse {
 
 export const agronomyApi = {
   getSoilCharacteristics: async (plotId: number): Promise<SoilCharacteristicsData> => {
-    const res = await api.get<SoilCharacteristicsData>(`/v1/agronomy/soil-characteristics/${plotId}`);
+    const res = await api.get<SoilCharacteristicsData>(`/agronomy/soil-characteristics/${plotId}`);
     return res.data;
   },
 
@@ -236,7 +236,7 @@ export const agronomyApi = {
     startDate?: string,
     candidateDays: number = 25
   ): Promise<PlantingWindowSimulationResponse> => {
-    const res = await api.post<PlantingWindowSimulationResponse>("/v1/agronomy/planting-window/simulate", {
+    const res = await api.post<PlantingWindowSimulationResponse>("/agronomy/planting-window/simulate", {
       plot_id: plotId,
       start_date: startDate,
       candidate_window_days: candidateDays,
@@ -249,23 +249,23 @@ export const agronomyApi = {
     precipitationMm: number = 28.5,
     etcMm: number = 4.2
   ): Promise<TerraceWaterBalanceResponse> => {
-    const res = await api.get<TerraceWaterBalanceResponse>(`/v1/agronomy/plots/${plotId}/water-balance`, {
+    const res = await api.get<TerraceWaterBalanceResponse>(`/agronomy/plots/${plotId}/water-balance`, {
       params: { precipitation_mm: precipitationMm, etc_mm: etcMm },
     });
     return res.data;
   },
 
   getVRN: async (plotId: number): Promise<VRNPrescriptionResponse> => {
-    const res = await api.get<VRNPrescriptionResponse>(`/v1/agronomy/plots/${plotId}/vrn`);
+    const res = await api.get<VRNPrescriptionResponse>(`/agronomy/plots/${plotId}/vrn`);
     return res.data;
   },
 
   getSAR: async (plotId: number): Promise<SARTelemetryResponse> => {
-    const res = await api.get<SARTelemetryResponse>(`/v1/agronomy/plots/${plotId}/sar`);
+    const res = await api.get<SARTelemetryResponse>(`/agronomy/plots/${plotId}/sar`);
     return res.data;
   },
 
   getDroneKmlDownloadUrl: (plotId: number): string => {
-    return `/api/v1/agronomy/plots/${plotId}/drone-mission.kml`;
+    return `/api/agronomy/plots/${plotId}/drone-mission.kml`;
   },
 };
