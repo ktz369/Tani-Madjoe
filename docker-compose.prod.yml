@@ -1,0 +1,81 @@
+# TANDUR production stack (adapted for shared host srv1081256)
+# - nginx service removed: host nginx terminates TLS + reverse-proxies
+# - ports remapped to avoid conflicts (5432/5433 = other DBs, 3000 = grafana)
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: tandur_prod_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:${DB_PORT:-5434}:5432"
+    volumes:
+      - tandur_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - tandur_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    image: tandur-backend:prod
+    container_name: tandur_prod_backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      SECRET_KEY: ${SECRET_KEY}
+      GEE_KEY_PATH: /app/credentials/paci-x-a7a003954fc1.json
+      GEE_SERVICE_ACCOUNT: ${GEE_SERVICE_ACCOUNT}
+      GEE_PROJECT: ${GEE_PROJECT}
+      MAPBOX_TOKEN: ${MAPBOX_TOKEN}
+      ENVIRONMENT: production
+      DEBUG: "False"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "10080"
+      BACKEND_CORS_ORIGINS: '["https://tandur.majestasolution.id"]'
+      FRONTEND_URL: https://tandur.majestasolution.id
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8100}:8000"
+    volumes:
+      - ./backend/credentials:/app/credentials:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - tandur_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        NEXT_PUBLIC_MAPBOX_TOKEN: ${MAPBOX_TOKEN}
+        NEXT_PUBLIC_API_BASE_URL: /api
+    image: tandur-frontend:prod
+    container_name: tandur_prod_frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3100}:3000"
+    depends_on:
+      - backend
+    networks:
+      - tandur_network
+
+networks:
+  tandur_network:
+    driver: bridge
+
+volumes:
+  tandur_pgdata:
+    driver: local
