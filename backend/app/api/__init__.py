@@ -15,6 +15,7 @@ try:
     from app.api.email import router as email_router
     from app.api.reports import router as reports_router
     from app.api.agronomy import router as agronomy_router
+    from app.api.operations import router as operations_router
 
     api_router = APIRouter()
     api_router.include_router(health_router)
@@ -32,6 +33,7 @@ try:
     api_router.include_router(email_router)
     api_router.include_router(reports_router)
     api_router.include_router(agronomy_router)
+    api_router.include_router(operations_router)
 except ImportError:
     api_router = None
 
