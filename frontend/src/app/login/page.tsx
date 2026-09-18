@@ -9,9 +9,7 @@ import {
   Eye, 
   EyeOff, 
   AlertCircle, 
-  ArrowRight, 
-  KeyRound,
-  ShieldCheck
+  ArrowRight
 } from "lucide-react";
 
 function LoginForm() {
@@ -19,8 +17,8 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const redirectUrl = searchParams.get("redirect") || "/";
 
-  const [email, setEmail] = useState<string>("admin@tani.local");
-  const [password, setPassword] = useState<string>("admin123");
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,12 +54,6 @@ function LoginForm() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleQuickFill = () => {
-    setEmail("admin@tani.local");
-    setPassword("admin123");
-    setError(null);
   };
 
   return (
@@ -172,27 +164,9 @@ function LoginForm() {
             </div>
           </form>
 
-          {/* Demo Credentials Helper */}
-          <div className="mt-6 pt-5 border-t border-black/[0.08]">
-            <div className="p-3 bg-[var(--field)] rounded-[3px] border border-black/[0.08] flex items-start gap-2.5">
-              <ShieldCheck className="w-4 h-4 text-[var(--accent)] flex-shrink-0 mt-0.5" />
-              <div className="flex-1 text-[12px]">
-                <p className="font-semibold text-[var(--ink)]">Kredensial Default Sistem</p>
-                <div className="mt-1 space-y-0.5 text-[var(--ink-2)] font-mono text-[11px]">
-                  <p>Email: <span className="font-medium text-[var(--ink)]">admin@tani.local</span></p>
-                  <p>Kata Sandi: <span className="font-medium text-[var(--ink)]">admin123</span></p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleQuickFill}
-                  className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--accent-ink)] hover:underline"
-                >
-                  <KeyRound className="w-3 h-3" />
-                  <span>Isi Form Otomatis</span>
-                </button>
-              </div>
-            </div>
-          </div>
+          {/* Demo credentials hint removed in deploy patch 2026-09-18:
+              hard-coded seed credentials do not exist anymore and publishing
+              working logins on a public page is unsafe. */}
 
           <p className="text-center text-[11px] text-[var(--ink-3)] mt-5">
             © 2026 TANDUR SaaS Platform. Seluruh hak cipta dilindungi undang-undang.

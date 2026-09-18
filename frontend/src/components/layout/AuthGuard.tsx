@@ -2,8 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { getToken, getCurrentUser, removeToken, removeUser, setToken, setUser } from "@/lib/auth";
-import { api } from "@/lib/api";
+import { getToken, getCurrentUser, removeToken, removeUser } from "@/lib/auth";
 import { Sprout } from "lucide-react";
 
 interface AuthGuardProps {
@@ -27,27 +26,11 @@ export default function AuthGuard({
       const token = getToken();
 
       if (requireAuth) {
-        // Protected routes require valid token
+        // Protected routes require a valid token.
+        // SECURITY (deploy patch 2026-09-18): automatic demo login with hard-coded
+        // seed credentials (admin@tani.local/admin123) was removed — it baked a
+        // working credential into the public JS bundle.
         if (!token) {
-          // Attempt automatic demo authentication for local testing
-          try {
-            const demoRes = await api.post("/auth/login", {
-              email: "admin@tani.local",
-              password: "admin123",
-            });
-            if (demoRes.data?.access_token) {
-              setToken(demoRes.data.access_token);
-              if (demoRes.data.user) setUser(demoRes.data.user);
-              if (isMounted) {
-                setIsAuthorized(true);
-                setIsLoading(false);
-              }
-              return;
-            }
-          } catch {
-            // Fallback to manual login if backend demo credentials fail
-          }
-
           if (isMounted) {
             setIsAuthorized(false);
             setIsLoading(false);
@@ -66,25 +49,6 @@ export default function AuthGuard({
           console.error("Sesi tidak valid:", error);
           removeToken();
           removeUser();
-
-          // Attempt re-auth with demo credentials
-          try {
-            const demoRes = await api.post("/auth/login", {
-              email: "admin@tani.local",
-              password: "admin123",
-            });
-            if (demoRes.data?.access_token) {
-              setToken(demoRes.data.access_token);
-              if (demoRes.data.user) setUser(demoRes.data.user);
-              if (isMounted) {
-                setIsAuthorized(true);
-                setIsLoading(false);
-              }
-              return;
-            }
-          } catch {
-            // Ignore
-          }
 
           if (isMounted) {
             setIsAuthorized(false);
