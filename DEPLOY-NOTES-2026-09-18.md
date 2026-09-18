@@ -35,7 +35,12 @@ docker compose --env-file .env -f docker-compose.prod.yml up -d backend
 docker compose --env-file .env -f docker-compose.prod.yml exec -T backend alembic upgrade head
 ```
 Redeploy code (later): `git -C /opt/tandur pull` → rebuild backend/frontend → `up -d`.
-⚠️ `git pull` akan menghapus/menimpa 3 patch lokal di bawah — terapkan ulang setelah pull.
+✅ **UPDATE 2026-09-18 14:35** — semua patch lokal (1–17) sudah **di-commit & di-push** ke `ktz369/Tani-Madjoe`
+(branch `master` + `main`, commit `8364000`). Jadi `git pull` di `/opt/tandur` sekarang **aman**: patch ikut
+terbawa, tidak perlu diterapkan ulang secara manual. Daftar di bawah tetap disimpan sebagai dokumentasi
+apa saja yang berbeda dari commit upstream `2fec71a`.
+
+⚠️ (historis, sebelum push) `git pull` akan menghapus/menimpa 3 patch lokal di bawah — terapkan ulang setelah pull.
 
 ## Local patches (BUKAN upstream — wajib dipakai ulang setiap pull)
 1. `backend/alembic/versions/0005_create_plots_table.py`
