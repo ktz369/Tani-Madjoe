@@ -21,6 +21,8 @@ export { default as PostHarvestModal } from "./PostHarvestModal";
 export { default as PlotTerraceMiniMap } from "./PlotTerraceMiniMap";
 export { default as DigitalAgronomyPanel } from "./DigitalAgronomyPanel";
 export { default as PlotDetailHeader } from "./PlotDetailHeader";
+export { default as EditPlotModal } from "./EditPlotModal";
+export type { EditPlotModalProps } from "./EditPlotModal";
 export type { PlotDetailHeaderProps } from "./PlotDetailHeader";
 export { default as SeasonActionModals } from "./SeasonActionModals";
 export type { SeasonActionModalsProps } from "./SeasonActionModals";

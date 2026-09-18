@@ -9,10 +9,12 @@ import {
   Sprout,
   Layers,
   Coins,
+  Trash2,
 } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import {
   PlotDetailHeader,
+  EditPlotModal,
   SeasonActionModals,
   SaprotanApplicationModal,
   PestScoutingModal,
@@ -64,6 +66,11 @@ function DetailPetakContent() {
   const [showPostHarvestModal, setShowPostHarvestModal] = useState(false);
   const [refreshOpsTrigger, setRefreshOpsTrigger] = useState(0);
   const [selectedSeason, setSelectedSeason] = useState<PlantingSeason | null>(null);
+  // Hapus petak (deploy patch 2026-09-18)
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  // Edit petak (deploy patch 2026-09-18)
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const showToast = (type: "success" | "error", message: string) => {
     setToast({ type, message });
@@ -110,6 +117,24 @@ function DetailPetakContent() {
   const openFailModal = (season: PlantingSeason) => {
     setSelectedSeason(season);
     setShowFailModal(true);
+  };
+
+  const handleDeletePlot = async () => {
+    if (!plot) return;
+    try {
+      setDeleting(true);
+      await api.delete(`/plots/${plot.id}`);
+      showToast("success", `Petak "${plot.name}" berhasil dihapus.`);
+      setShowDeleteModal(false);
+      setTimeout(() => router.push("/peta"), 900);
+    } catch (err: any) {
+      console.error("Gagal menghapus petak:", err);
+      showToast(
+        "error",
+        err.response?.data?.detail || "Gagal menghapus petak lahan."
+      );
+      setDeleting(false);
+    }
   };
 
   const tabList: { key: TabKey; label: string; icon: React.ReactNode }[] = [
@@ -171,6 +196,8 @@ function DetailPetakContent() {
               onOpenScouting={() => setShowScoutingModal(true)}
               onOpenSaprotan={() => setShowSaprotanModal(true)}
               onOpenCreateSeason={() => setShowCreateModal(true)}
+              onEdit={() => setShowEditModal(true)}
+              onDelete={() => setShowDeleteModal(true)}
             />
 
             {/* SEGMENTED TAB BAR */}
@@ -245,6 +272,49 @@ function DetailPetakContent() {
         ) : null}
       </main>
 
+      {/* Modal Konfirmasi Hapus Petak (deploy patch 2026-09-18) */}
+      {plot && showDeleteModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white border border-black/[0.08] rounded-[3px] p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 flex-shrink-0 rounded-[3px] bg-rose-50 border border-rose-200 flex items-center justify-center">
+                <AlertTriangle className="w-4 h-4 text-rose-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-[15px] font-bold text-[var(--ink)]">Hapus Petak Lahan?</h3>
+                <p className="mt-1 text-[12px] text-[var(--ink-2)] leading-relaxed">
+                  Petak <strong className="text-[var(--ink)]">{plot.name}</strong> akan dihapus
+                  permanen dari sistem.
+                </p>
+                <p className="mt-2 text-[11px] text-[var(--ink-3)] bg-[var(--field)] border border-black/[0.08] rounded-[3px] p-2 font-mono leading-relaxed">
+                  Peringatan: seluruh data yang terikat ikut terhapus — musim tanam,
+                  observasi satelit (NDVI/SAR), akumulasi GDD, dan alert.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={deleting}
+                className="h-[34px] px-3.5 rounded-[3px] border border-black/[0.08] bg-white hover:bg-black/[0.03] text-[var(--ink)] text-[12px] font-medium transition-colors disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleDeletePlot}
+                disabled={deleting}
+                className="h-[34px] px-3.5 rounded-[3px] bg-rose-600 hover:bg-rose-700 text-white text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {deleting ? "Menghapus..." : "Ya, Hapus Petak"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Season Action Modals */}
       {plot && (
         <SeasonActionModals
@@ -266,6 +336,18 @@ function DetailPetakContent() {
       {/* Precision Operations Modals */}
       {plot && (
         <>
+          <EditPlotModal
+            isOpen={showEditModal}
+            plot={plot}
+            varieties={varieties}
+            onClose={() => setShowEditModal(false)}
+            onSuccess={(updated) => {
+              setShowEditModal(false);
+              showToast("success", `Data petak "${updated.name}" berhasil diperbarui.`);
+              fetchData();
+            }}
+          />
+
           <SaprotanApplicationModal
             isOpen={showSaprotanModal}
             onClose={() => setShowSaprotanModal(false)}

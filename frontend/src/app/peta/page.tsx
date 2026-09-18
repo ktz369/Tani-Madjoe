@@ -21,17 +21,20 @@ import {
   Radio,
   Activity,
   Bug,
+  Trash2,
+  PencilLine,
 } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import PlotSatellitePanel from "@/components/satellite/PlotSatellitePanel";
 import TimelineSlider from "@/components/map/TimelineSlider";
 import SatelliteOverlayControl from "@/components/map/SatelliteOverlayControl";
-import { PestScoutingModal } from "@/components/plot";
+import { PestScoutingModal, EditPlotModal } from "@/components/plot";
 import { api } from "@/lib/api";
 import { operationsApi } from "@/lib/operationsApi";
 import { generatePestQuarantineBuffer, QuarantineGeoJSON } from "@/lib/duckdb-spatial";
 import { PestScoutingReport } from "@/types/operations";
 import {
+  CropVariety,
   Estate,
   EstateIndicesTimeline,
   Plot,
@@ -96,6 +99,14 @@ export default function PetaLahanPage() {
   const [quarantineBufferGeoJSON, setQuarantineBufferGeoJSON] = useState<QuarantineGeoJSON | null>(null);
   const [showQuarantineOverlay, setShowQuarantineOverlay] = useState<boolean>(true);
   const [showScoutingModal, setShowScoutingModal] = useState<boolean>(false);
+  // Hapus petak (deploy patch 2026-09-18)
+  const [plotToDelete, setPlotToDelete] = useState<Plot | null>(null);
+  const [deletingPlot, setDeletingPlot] = useState<boolean>(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [reloadPlotsTrigger, setReloadPlotsTrigger] = useState<number>(0);
+  // Edit petak (deploy patch 2026-09-18)
+  const [plotToEdit, setPlotToEdit] = useState<Plot | null>(null);
+  const [varieties, setVarieties] = useState<CropVariety[]>([]);
 
   // Refs to prevent unnecessary map rebuilds while maintaining fresh references
   const plotsRef = useRef<Plot[]>([]);
@@ -158,7 +169,34 @@ export default function PetaLahanPage() {
     }
 
     loadPlots();
-  }, [selectedEstateId]);
+  }, [selectedEstateId, reloadPlotsTrigger]);
+
+  // Master varietas untuk form edit petak (deploy patch 2026-09-18)
+  useEffect(() => {
+    api
+      .get<CropVariety[]>("/varieties")
+      .then((res) => setVarieties(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setVarieties([]));
+  }, []);
+
+  const handleConfirmDeletePlot = async () => {
+    if (!plotToDelete) return;
+    try {
+      setDeletingPlot(true);
+      setDeleteError(null);
+      await api.delete(`/plots/${plotToDelete.id}`);
+      if (selectedPlot?.id === plotToDelete.id) setSelectedPlot(null);
+      setPlotToDelete(null);
+      setReloadPlotsTrigger((prev) => prev + 1);
+    } catch (err: any) {
+      console.error("Gagal menghapus petak:", err);
+      setDeleteError(
+        err.response?.data?.detail || "Gagal menghapus petak lahan. Coba lagi."
+      );
+    } finally {
+      setDeletingPlot(false);
+    }
+  };
 
   // 3. Fetch Indices Timeline for selected estate
   useEffect(() => {
@@ -643,7 +681,12 @@ export default function PetaLahanPage() {
   // 6b. OPS-06: Fetch Pest Scouting Reports & Generate DuckDB-WASM Quarantine Buffer
   const fetchScoutingAndBuffer = async () => {
     try {
-      const pid = selectedPlot ? selectedPlot.id : (plotsRef.current[0]?.id || 1);
+      const pid = selectedPlot ? selectedPlot.id : plotsRef.current[0]?.id;
+      if (!pid) {
+        setScoutingReports([]);
+        setQuarantineBufferGeoJSON(null);
+        return;
+      }
       const rawReports = await operationsApi.getPestScoutingReports(pid);
       const reports = Array.isArray(rawReports) ? rawReports : [];
       setScoutingReports(reports);
@@ -1358,6 +1401,31 @@ export default function PetaLahanPage() {
                         >
                           Detail &rarr;
                         </Link>
+                        <button
+                          type="button"
+                          title="Edit petak (nama, komoditas, varietas, tanggal tanam)"
+                          aria-label="Edit petak lahan"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPlotToEdit(plot);
+                          }}
+                          className="py-1 px-1.5 rounded-[2px] bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 transition-colors"
+                        >
+                          <PencilLine className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Hapus petak lahan"
+                          aria-label="Hapus petak lahan"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteError(null);
+                            setPlotToDelete(plot);
+                          }}
+                          className="py-1 px-1.5 rounded-[2px] bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
                       </div>
                     </div>
                   );
@@ -1366,6 +1434,71 @@ export default function PetaLahanPage() {
             </div>
           </div>
         </div>
+
+        {/* Modal Edit Petak (deploy patch 2026-09-18) */}
+        <EditPlotModal
+          isOpen={plotToEdit !== null}
+          plot={plotToEdit ?? ({} as Plot)}
+          varieties={varieties}
+          onClose={() => setPlotToEdit(null)}
+          onSuccess={() => {
+            setPlotToEdit(null);
+            setReloadPlotsTrigger((prev) => prev + 1);
+          }}
+        />
+
+        {/* Modal Konfirmasi Hapus Petak (deploy patch 2026-09-18) */}
+        {plotToDelete && (
+          <div
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => !deletingPlot && setPlotToDelete(null)}
+          >
+            <div
+              className="w-full max-w-md bg-white border border-black/[0.08] rounded-[3px] p-5 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 flex-shrink-0 rounded-[3px] bg-rose-50 border border-rose-200 flex items-center justify-center">
+                  <Trash2 className="w-4 h-4 text-rose-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-[15px] font-bold text-[var(--ink)]">Hapus Petak Lahan?</h3>
+                  <p className="mt-1 text-[12px] text-[var(--ink-2)] leading-relaxed">
+                    Petak <strong className="text-[var(--ink)]">{plotToDelete.name}</strong> akan
+                    dihapus permanen dari sistem.
+                  </p>
+                  <p className="mt-2 text-[11px] text-[var(--ink-3)] bg-[var(--field)] border border-black/[0.08] rounded-[3px] p-2 font-mono leading-relaxed">
+                    Peringatan: musim tanam, observasi satelit (NDVI/SAR), akumulasi GDD, dan
+                    alert yang terikat pada petak ini ikut terhapus.
+                  </p>
+                  {deleteError && (
+                    <p className="mt-2 text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-[3px] p-2 font-mono">
+                      {deleteError}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="mt-5 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPlotToDelete(null)}
+                  disabled={deletingPlot}
+                  className="h-[34px] px-3.5 rounded-[3px] border border-black/[0.08] bg-white hover:bg-black/[0.03] text-[var(--ink)] text-[12px] font-medium transition-colors disabled:opacity-50"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeletePlot}
+                  disabled={deletingPlot}
+                  className="h-[34px] px-3.5 rounded-[3px] bg-rose-600 hover:bg-rose-700 text-white text-[12px] font-medium transition-colors disabled:opacity-50"
+                >
+                  {deletingPlot ? "Menghapus..." : "Ya, Hapus Petak"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Modal Indeks Satelit & SAR */}
         {satelliteModalPlot && (

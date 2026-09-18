@@ -9,6 +9,8 @@ import {
   Bug,
   Package,
   Building2,
+  Trash2,
+  PencilLine,
 } from "lucide-react";
 import { PlotTerraceMiniMap } from "@/components/plot";
 import { PlantingSeason, Plot, PlotDetail } from "@/types";
@@ -20,6 +22,8 @@ export interface PlotDetailHeaderProps {
   onOpenScouting: () => void;
   onOpenSaprotan: () => void;
   onOpenCreateSeason: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
 export default function PlotDetailHeader({
@@ -29,6 +33,8 @@ export default function PlotDetailHeader({
   onOpenScouting,
   onOpenSaprotan,
   onOpenCreateSeason,
+  onEdit,
+  onDelete,
 }: PlotDetailHeaderProps) {
   const currentHst = plotDetail?.current_hst ?? plot.current_hst ?? 0;
 
@@ -118,6 +124,30 @@ export default function PlotDetailHeader({
               <Plus className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Mulai Musim</span>
             </button>
+
+            {onEdit && (
+              <button
+                onClick={onEdit}
+                className="h-[34px] px-3 rounded-[3px] border border-black/[0.08] bg-white hover:bg-black/[0.03] text-[var(--ink)] text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors"
+                title="Edit nama, komoditas, varietas, atau tanggal tanam petak"
+                aria-label="Edit Petak"
+              >
+                <PencilLine className="w-3.5 h-3.5 text-sky-700" />
+                <span className="hidden sm:inline">Edit</span>
+              </button>
+            )}
+
+            {onDelete && (
+              <button
+                onClick={onDelete}
+                className="h-[34px] px-3 rounded-[3px] border border-rose-200 bg-white hover:bg-rose-50 text-rose-700 text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors"
+                title="Hapus petak lahan ini dari sistem"
+                aria-label="Hapus Petak"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Hapus</span>
+              </button>
+            )}
           </div>
         </div>
 
